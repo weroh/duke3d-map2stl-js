@@ -32,10 +32,7 @@ var numsects=0;
 var sectorInfo=[];//static sect_t *sec;
 var b7sec;
 var b7wal;
-var map2stl_output = {
-   normals: [],
-   verts: []
-};
+var map2stl_output;
 
 
 function shellsrt(a, n)
@@ -252,10 +249,7 @@ function saveasstl (filnam)
    var tbuf = [80];
 
    // This is our intermediate format before converting to obj or whatever
-   map2stl_output = {
-      normals: [],
-      verts: []
-   };
+   map2stl_output = [];
 
    for(s=0;s<numsects;s++)
    {
@@ -305,10 +299,12 @@ function saveasstl (filnam)
 
                //console.log(fp2, fp);
                //console.log(wal);
-               map2stl_output.normals.push(fp2);
-               map2stl_output.verts.push(fp[2]);
-               map2stl_output.verts.push(fp[1]);
-               map2stl_output.verts.push(fp[0]);
+               map2stl_output.push({
+                  normal: fp2,
+                  tri: fp,
+                  sec: s,
+                  wal: w
+               });
                numtris++;
             }
          }
@@ -352,10 +348,12 @@ function saveasstl (filnam)
 
                //console.log(npol);
                //console.log(fp2, fp);
-               map2stl_output.normals.push(fp2);
-               map2stl_output.verts.push(fp[2]);
-               map2stl_output.verts.push(fp[1]);
-               map2stl_output.verts.push(fp[0]);
+               map2stl_output.push({
+                  normal: fp2,
+                  tri: fp,
+                  sec: s,
+                  wal: w
+               });
                numtris++;
             }
          }
