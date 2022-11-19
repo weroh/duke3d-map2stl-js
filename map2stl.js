@@ -1,31 +1,3 @@
-//define('PI', 3.141592653589793);
-
-/*
-typedef struct { float x, y; } point2d;
-typedef struct { float x, y, z; } point3d;
-typedef struct { float x, y, z; int n; } kgln_t;
-typedef struct { long w, s; } vertlist_t;
-typedef struct { float x, y; long n, ns, nw; } wall_t;
-typedef struct { float z[2]; point2d grad[2]; wall_t *wall; long n; } sect_t;
-
-   //Build1 format variables:
-typedef struct { short picnum, heinum; signed char shade; char pal, xpanning, ypanning; } build7surf_t;
-typedef struct
-{
-   short wallptr, wallnum;
-   long z[2]; short stat[2]; build7surf_t surf[2];
-   char visibility, filler;
-   short lotag, hitag, extra;
-} build7sect_t;
-typedef struct
-{
-   long x, y;
-   short point2, nextwall, nextsector, cstat, picnum, overpicnum;
-   signed char shade;
-   char pal, xrepeat, yrepeat, xpanning, ypanning;
-   short lotag, hitag, extra;
-} build7wall_t;
-*/
 function new_wall_t() {
    // typedef struct { float x, y; long n, ns, nw; } wall_t;
    return {
@@ -46,51 +18,25 @@ function new_sect_t() {
       n:0
    };
 }
+
+// typedef struct { float x, y, z; int n; } kgln_t;
+function new_kgln_t() {
+   return { x: 0, y: 0, z: 0, n: 0 };
+}
+// typedef struct { float x, y, z; } point3d;
+function new_point3d() {
+   return { x:0, y:0, z:0 };
+}
+
 var numsects=0;
 var sectorInfo=[];//static sect_t *sec;
 var b7sec;
 var b7wal;
+var map2stl_output = {
+   normals: [],
+   verts: []
+};
 
-function checknextwalls()
-{
-   var x0, y0, x1, y1;
-   var s0, w0, w0n, s1, w1, w1n;
-   var $goto = false;
-
-   //Clear all nextsect/nextwalls
-   for(s0=0;s0<numsects;s0++) {
-      for(w0=0;w0<sectorInfo[s0].n;w0++)  {
-         sectorInfo[s0].wall[w0].ns = sectorInfo[s0].wall[w0].nw = -1;
-      }
-   }
-
-   for(s1=1;s1<numsects;s1++) {
-      for(w1=0;w1<sectorInfo[s1].n;w1++)
-      {
-         x0 = sectorInfo[s1].wall[w1].x;  y0 = sectorInfo[s1].wall[w1].y; w1n = sectorInfo[s1].wall[w1].n+w1;
-         x1 = sectorInfo[s1].wall[w1n].x; y1 = sectorInfo[s1].wall[w1n].y;
-         for(s0=0;s0<s1;s0++) {
-            for(w0=0;w0<sectorInfo[s0].n;w0++) {
-               if ((sectorInfo[s0].wall[w0].x == x1) && (sectorInfo[s0].wall[w0].y == y1))
-               {
-                  w0n = sectorInfo[s0].wall[w0].n+w0;
-                  if ((sectorInfo[s0].wall[w0n].x == x0) && (sectorInfo[s0].wall[w0n].y == y0))
-                  {
-                     sectorInfo[s1].wall[w1].ns = s0;
-                     sectorInfo[s1].wall[w1].nw = w0;
-                     sectorInfo[s0].wall[w0].ns = s1;
-                     sectorInfo[s0].wall[w0].nw = w1;
-                     $goto = true;
-                  }
-               }
-               if ($goto) { break; }
-            }
-            if ($goto) { break; }
-         }
-         //cnw_break2:;
-      }
-   }
-}
 
 function shellsrt(a, n)
 {
@@ -107,14 +53,6 @@ function shellsrt(a, n)
             }
 }
 
-
-function getslopez(s, i, x, y)
-{
-   //wall_t *wal = s.wall;
-   var wal = s.wall;
-   return((wal[0].x-x)*s.grad[i].x + (wal[0].y-y)*s.grad[i].y + s.z[i]);
-}
-
 //typedef struct { float x[4], y[2]; long pwal[2]; } zoid_t;
 function sect2trap (wal, n, zoids)
 {
@@ -124,11 +62,6 @@ function sect2trap (wal, n, zoids)
    //(*zoids) = 0; (*retnzoids) = 0; 
    zoids.length = 0;
    if (n < 3) return(0);
-
-   //secy   = (float *)malloc(n*sizeof(  secy[0])); if (!secy  ) goto badret;
-   //trapx0 = (float *)malloc(n*sizeof(trapx0[0])); if (!trapx0) goto badret;
-   //trapx1 = (float *)malloc(n*sizeof(trapx1[0])); if (!trapx1) goto badret;
-   //pwal   = (long  *)malloc(n*sizeof(  pwal[0])); if (!pwal  ) goto badret;
 
    for(i=n-1;i>=0;i--) {
       //secy[i] = wal[i].y;
@@ -142,7 +75,6 @@ function sect2trap (wal, n, zoids)
    }
 
    zoidalloc = secn*2; //just a guess (not guaranteed to fit)
-   //zoids = (zoid_t *)malloc(zoidalloc*sizeof(zoid_t)); if (!zoids) goto badret;
 
    tot = 0;
    for(s=0;s<secn-1;s++)
@@ -177,25 +109,12 @@ function sect2trap (wal, n, zoids)
          }
       }
 
-      /*
-      if (tot+ntrap > zoidalloc)
-      {
-         //zoidalloc <<= 1; if (tot+ntrap > zoidalloc) zoidalloc = tot+ntrap;
-         //zoids = (zoid_t *)realloc(zoids,zoidalloc*sizeof(zoid_t)); if (!zoids) goto badret;
-      }
-      */
-
       for(i=0;i<ntrap;i=j+1)
       {
          j = i+1;
          if ((trapx0[i+1] <= trapx0[i]) && (trapx1[i+1] <= trapx1[i])) continue;
          while ((j+2 < ntrap) && (trapx0[j+1] <= trapx0[j]) && (trapx1[j+1] <= trapx1[j])) j += 2;
 
-         /*
-         zoids[tot].x[0] = trapx0[i]; zoids[tot].x[1] = trapx0[j]; zoids[tot].y[0] = sy0;
-         zoids[tot].x[3] = trapx1[i]; zoids[tot].x[2] = trapx1[j]; zoids[tot].y[1] = sy1;
-         zoids[tot].pwal[0] = pwal[i]; zoids[tot].pwal[1] = pwal[j];
-         */
          
          // { float x[4], y[2]; long pwal[2]; }
          var zoidTemp = { x:[0,0,0,0], y:[0,0], pwal:[0,0] };
@@ -210,14 +129,13 @@ function sect2trap (wal, n, zoids)
       }
    }
    return true;
-   /*
-badret:;
-   if (!secy  ) free(secy);
-   if (!trapx0) free(trapx0);
-   if (!trapx1) free(trapx1);
-   if (!pwal  ) free(pwal);
-   if (!zoids ) free(zoids);
-   */
+}
+
+function getslopez(s, i, x, y)
+{
+   //wall_t *wal = s.wall;
+   var wal = s.wall;
+   return((wal[0].x-x)*s.grad[i].x + (wal[0].y-y)*s.grad[i].y + s.z[i]);
 }
 
 function getwalls (s, w, ver, maxverts)
@@ -253,6 +171,7 @@ function getwalls (s, w, ver, maxverts)
             { tver = ver[j]; ver[j] = ver[k]; ver[k] = tver; }
    return(vn);
 }
+
 function copy_kgln_t(k1,k2) {
    k1.x = k2.x;
    k1.y = k2.y;
@@ -298,24 +217,23 @@ function wallclip (pol, npol)
    return(3);
 }
 
-   //   //STL binary format:
-   //char filler[80];
-   //unsigned long numtris;
-   //for(i=0;i<numtris;i++)
-   //{
-   //   point3d norm, v[3]; //vertices are CCW and must be + coords
-   //   short filler;
-   //}
+function normalize(pt0, pt1, pt2) {
+   var result = {x:0, y:0, z:0};
 
+   result.x = (pt1.y-pt0.y)*(pt2.z-pt0.z) - (pt1.z-pt0.z)*(pt2.y-pt0.y);
+   result.y = (pt1.z-pt0.z)*(pt2.x-pt0.x) - (pt1.x-pt0.x)*(pt2.z-pt0.z);
+   result.z = (pt1.x-pt0.x)*(pt2.y-pt0.y) - (pt1.y-pt0.y)*(pt2.x-pt0.x);
 
-// typedef struct { float x, y, z; int n; } kgln_t;
-function new_kgln_t() {
-   return { x: 0, y: 0, z: 0, n: 0 };
+   f = result.x*result.x + result.y*result.y + result.z*result.z;
+   if (f > 0) f = -1/Math.sqrt(f);
+
+   result.x *= f;
+   result.y *= f;
+   result.z *= f; 
+
+   return result;
 }
-// typedef struct { float x, y, z; } point3d;
-function new_point3d() {
-   return { x:0, y:0, z:0 };
-}
+
 function saveasstl (filnam)
 {
    const MAXVERTS = 256;
@@ -334,13 +252,11 @@ function saveasstl (filnam)
    var tbuf = [80];
 
    // This is our intermediate format before converting to obj or whatever
-   var output = {};
+   map2stl_output = {
+      normals: [],
+      verts: []
+   };
 
-   ///fil = fopen(filnam,"wb"); if (!fil) return;
-   ///memset(tbuf,0,80);
-   ///fwrite(tbuf,80,1,fil); //header ignored in STL
-   ///numtris = 0;
-   ///fwrite(&numtris,4,1,fil); //dummy write
    for(s=0;s<numsects;s++)
    {
       //draw sector filled
@@ -386,18 +302,18 @@ function saveasstl (filnam)
                //fwrite(&fp2,4*3,1,fil);
                //fwrite(fp,4*3*3,1,fil);
                //fwrite(tbuf,2,1,fil); //2 bytes of filler
-               console.log(fp2, fp);
-               write_vector(fp2);
-               write_vector(fp[2]);
-               write_vector(fp[1]);
-               write_vector(fp[0]);
+
+               //console.log(fp2, fp);
+               //console.log(wal);
+               map2stl_output.normals.push(fp2);
+               map2stl_output.verts.push(fp[2]);
+               map2stl_output.verts.push(fp[1]);
+               map2stl_output.verts.push(fp[0]);
                numtris++;
             }
          }
          //free(zoids);
       }
-
-      console.log("sects: " + s);
 
       wal = sectorInfo[s].wall; wn = sectorInfo[s].n;
       for(w=0;w<wn;w++)
@@ -423,7 +339,8 @@ function saveasstl (filnam)
             {
                fp[1].x = npol[j-1].x; fp[1].y = npol[j-1].y; fp[1].z = npol[j-1].z;
                fp[2].x = npol[j  ].x; fp[2].y = npol[j  ].y; fp[2].z = npol[j  ].z;
-                  //fp2 = unit norm
+               
+               //fp2 = unit norm
                fp2.x = (fp[1].y-fp[0].y)*(fp[2].z-fp[0].z) - (fp[1].z-fp[0].z)*(fp[2].y-fp[0].y);
                fp2.y = (fp[1].z-fp[0].z)*(fp[2].x-fp[0].x) - (fp[1].x-fp[0].x)*(fp[2].z-fp[0].z);
                fp2.z = (fp[1].x-fp[0].x)*(fp[2].y-fp[0].y) - (fp[1].y-fp[0].y)*(fp[2].x-fp[0].x);
@@ -433,12 +350,12 @@ function saveasstl (filnam)
                //fwrite(fp,4*3*3,1,fil);
                //fwrite(tbuf,2,1,fil); //2 bytes of filler
 
-               console.log(npol);
-               console.log(fp2, fp);
-               write_vector(fp2);
-               write_vector(fp[2]);
-               write_vector(fp[1]);
-               write_vector(fp[0]);
+               //console.log(npol);
+               //console.log(fp2, fp);
+               map2stl_output.normals.push(fp2);
+               map2stl_output.verts.push(fp[2]);
+               map2stl_output.verts.push(fp[1]);
+               map2stl_output.verts.push(fp[0]);
                numtris++;
             }
          }
@@ -453,33 +370,65 @@ function saveasstl (filnam)
 }
 
 
+
+
+function write_vector(pt) {
+   printf(pt.x + "," + (-pt.z) + "," + pt.y);
+}
+
+function printf(txt) {
+   console.log(txt);
+}
+
+$("li.loadmap a").on("click", function(e) {
+   e.preventDefault();
+   var filename = $(this).attr("data-filename");
+
+   dukemap = Object.create(DukeMap);
+   dukemap.loadURL(filename);
+   dukemap.onLoad = function() { // void main()
+
+      if (!loadmap()) { printf("error loading map\n"); return(2); }
+      checknextwalls();
+      saveasstl();
+      return(0);
+
+   };
+});
+
+
 function loadmap() {
-   // NOTE: Most of this code is handled by dukemap.js
-   /*
-   float f, fx, fy;
-   long i, j, k;
-   short s;
-   FILE *fil;
-
-   fil = fopen(filnam,"rb"); if (!fil) return(0);
-   fread(&i,4,1,fil); if (i != 0x00000007) return(0); //not Build1 .MAP format 7
-   fseek(fil,20,SEEK_SET);
-   */
-
    // Copy relevant sector info and walls to sectorInfo[]
    sectorInfo = [];
    for (var i=0;i<dukemap.map.sectors.length;i++) {
       var b7sec = dukemap.map.sectors[i];
+
+      // Create new sectorInfo
       sectorInfo.push(new_sect_t());
       sectorInfo[i].n = b7sec.wallnum;
-      //sectorInfo[i].wall = (wall_t *)realloc(sectorInfo[i].wall,sectorInfo[i].n*sizeof(wall_t));
+
+      /*
       for(j=0;j<2;j++) {
-         //sectorInfo[i].z[j] = (b7sec.z[j])*(1/(512*16));
          sectorInfo[i].z[j] = (b7sec.z[j])*(1 / (16));
          sectorInfo[i].grad[j].x = sectorInfo[i].grad[j].y = 0;
          if (b7sec.stat[j]&2) { //Enable slopes flag
             sectorInfo[i].grad[j].y = b7sec.surf[j].heinum*(1/4096);
          }
+
+         // Copy original sector info for textures and stuff
+         sectorInfo[i].orig = b7sec;
+      }
+      */
+
+      sectorInfo[i].z[0] = (b7sec.ceilingz)*(1 / (16));
+      sectorInfo[i].z[1] = (b7sec.floorz)*(1 / (16));
+
+      //Enable slopes flag
+      if (b7sec.ceilingstat&2) { //Enable slopes flag
+         sectorInfo[i].grad[0].y = b7sec.ceilingheinum*(1/4096);
+      }
+      if (b7sec.floorstat&2) { //Enable slopes flag
+         sectorInfo[i].grad[1].y = b7sec.floorheinum*(1/4096);
       }
    }
 
@@ -511,42 +460,46 @@ function loadmap() {
          sectorInfo[i].grad[j].y = fy*sectorInfo[i].grad[j].y;
       }
    }
-
-   checknextwalls();
-   //fclose(fil);
    return true;
 }
 
-function main() {
-   if (!loadmap()) { printf("error loading map\n"); return(2); }
-   saveasstl();
-   return(0);
+function checknextwalls()
+{
+   var x0, y0, x1, y1;
+   var s0, w0, w0n, s1, w1, w1n;
+   var $goto = false;
+
+   //Clear all nextsect/nextwalls
+   for(s0=0;s0<numsects;s0++) {
+      for(w0=0;w0<sectorInfo[s0].n;w0++)  {
+         sectorInfo[s0].wall[w0].ns = sectorInfo[s0].wall[w0].nw = -1;
+      }
+   }
+
+   for(s1=1;s1<numsects;s1++) {
+      for(w1=0;w1<sectorInfo[s1].n;w1++)
+      {
+         x0 = sectorInfo[s1].wall[w1].x;  y0 = sectorInfo[s1].wall[w1].y; w1n = sectorInfo[s1].wall[w1].n+w1;
+         x1 = sectorInfo[s1].wall[w1n].x; y1 = sectorInfo[s1].wall[w1n].y;
+         for(s0=0;s0<s1;s0++) {
+            for(w0=0;w0<sectorInfo[s0].n;w0++) {
+               if ((sectorInfo[s0].wall[w0].x == x1) && (sectorInfo[s0].wall[w0].y == y1))
+               {
+                  w0n = sectorInfo[s0].wall[w0].n+w0;
+                  if ((sectorInfo[s0].wall[w0n].x == x0) && (sectorInfo[s0].wall[w0n].y == y0))
+                  {
+                     sectorInfo[s1].wall[w1].ns = s0;
+                     sectorInfo[s1].wall[w1].nw = w0;
+                     sectorInfo[s0].wall[w0].ns = s1;
+                     sectorInfo[s0].wall[w0].nw = w1;
+                     $goto = true;
+                  }
+               }
+               if ($goto) { break; }
+            }
+            if ($goto) { break; }
+         }
+         //cnw_break2:;
+      }
+   }
 }
-
-function write_vector(pt) {
-   printf(pt.x + "," + (-pt.z) + "," + pt.y);
-   /*
-   printf(pt.x);
-   fwrite(",", 1, 1, fil);
-   printf(pt.y);
-   fwrite(",", 1, 1, fil);
-   printf(pt.z);
-   fwrite("|", 1, 1, fil);
-   */
-}
-
-function printf(txt) {
-   console.log(txt);
-}
-
-$("li.loadmap a").on("click", function(e) {
-   e.preventDefault();
-   var filename = $(this).attr("data-filename");
-
-   dukemap = Object.create(DukeMap);
-   dukemap.loadURL(filename);
-   dukemap.onLoad = function() {
-      //console.log(dukemap.map)
-      main();
-   };
-});

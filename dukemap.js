@@ -1,3 +1,19 @@
+/*
+This DukeMap object is meant for loading .MAP data for version 7 Build Maps (e.g. Duke Nukem)
+into a really easy to use JavaScript object which could easily be saved as a JSON file.
+
+NOTE: Could also work with Shadow Warrior. Haven't tested. IDK
+
+Usage:
+
+  DukeMap.loadURL("E1L1.map");
+  DukeMap.onLoad = function() {
+    console.log(DukeMap.map); // Map details are in here
+  };
+
+SPECS and variable names come from:
+https://moddingwiki.shikadi.net/wiki/MAP_Format_(Build)#Version_7
+*/
 var DukeMap = {
   loadURL: function(url) {
     var xhr = new XMLHttpRequest();
@@ -275,7 +291,6 @@ var DukeMap = {
     return result;
   },
 
-  // SPECS https://moddingwiki.shikadi.net/wiki/MAP_Format_(Build)#Version_7
   read_sector() {
     self = this;
     var sector = {
