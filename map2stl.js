@@ -131,6 +131,7 @@ function sect2trap (wal, n, zoids)
 function getslopez(s, i, x, y)
 {
    //wall_t *wal = s.wall;
+   console.log(s);
    var wal = s.wall;
    return((wal[0].x-x)*s.grad[i].x + (wal[0].y-y)*s.grad[i].y + s.z[i]);
 }
@@ -152,8 +153,13 @@ function getwalls (s, w, ver, maxverts)
    {
       wal2 = sectorInfo[bs].wall; i = wal2[bw].n+bw; //Make sure it's an opposite wall
       if ((wal[w].x == wal2[i].x) && (wal[nw].x == wal2[bw].x) &&
-          (wal[w].y == wal2[i].y) && (wal[nw].y == wal2[bw].y))
-         { if (vn < maxverts) { ver[vn].s = bs; ver[vn].w = bw; vn++; } }
+          (wal[w].y == wal2[i].y) && (wal[nw].y == wal2[bw].y)) {
+         if (vn < maxverts) {
+            ver[vn].s = bs;
+            ver[vn].w = bw;
+            vn++;
+         }
+      }
       bs = wal2[bw].ns;
       bw = wal2[bw].nw;
    }
@@ -161,11 +167,21 @@ function getwalls (s, w, ver, maxverts)
       //Sort next sects by order of height in middle of wall (crap sort)
    fx = (wal[w].x+wal[nw].x)*0.5;
    fy = (wal[w].y+wal[nw].y)*0.5;
-   for(k=1;k<vn;k++)
-      for(j=0;j<k;j++)
+   for(k=1;k<vn;k++) {
+      for(j=0;j<k;j++) {
+         console.log("...");
+         console.log("j:" + j + " k:" + k + " ver:" + ver);
+         console.log(sectorInfo[ver[j].s]);
+         console.log(sectorInfo[ver[k].s]);
+
          if (getslopez(sectorInfo[ver[j].s],0,fx,fy) + getslopez(sectorInfo[ver[j].s],1,fx,fy) >
-             getslopez(sectorInfo[ver[k].s],0,fx,fy) + getslopez(sectorInfo[ver[k].s],1,fx,fy))
-            { tver = ver[j]; ver[j] = ver[k]; ver[k] = tver; }
+             getslopez(sectorInfo[ver[k].s],0,fx,fy) + getslopez(sectorInfo[ver[k].s],1,fx,fy)) {
+            tver = ver[j];
+            ver[j] = ver[k];
+            ver[k] = tver;
+         }
+      }
+   }
    return(vn);
 }
 
@@ -236,7 +252,11 @@ function saveasstl (filnam)
    const MAXVERTS = 256;
 
    //#define MAXVERTS 256 //WARNING:not dynamic
-   var verts = [MAXVERTS];
+   var verts = [];
+   for (i=0;i<MAXVERTS;i++){
+      //typedef struct { long w, s; } vertlist_t;
+      verts.push({w:0, s:0});
+   }
    var pol = [new_kgln_t(), new_kgln_t(), new_kgln_t(), new_kgln_t()], npol = [new_kgln_t(), new_kgln_t(), new_kgln_t(), new_kgln_t()]; // typedef struct { float x, y, z; int n; } kgln_t;
    var fp = [new_point3d(),new_point3d(),new_point3d()], fp2 = new_point3d();
    var grad;
@@ -324,6 +344,9 @@ function saveasstl (filnam)
             if (k >  0) { s0 = verts[k-1].s; cf0 = 1; } else { s0 = s; cf0 = 0; }
             if (k < vn) { s1 = verts[k  ].s; cf1 = 0; } else { s1 = s; cf1 = 1; }
 
+            //console.log(k, verts);
+            //console.log(s0, sectorInfo[s0]);
+            //console.log(s1, sectorInfo[s1]);
             pol[0].z = getslopez(sectorInfo[s0],cf0,pol[0].x,pol[0].y);
             pol[1].z = getslopez(sectorInfo[s0],cf0,pol[1].x,pol[1].y);
             pol[2].z = getslopez(sectorInfo[s1],cf1,pol[2].x,pol[2].y);
@@ -389,6 +412,8 @@ $("li.loadmap a").on("click", function(e) {
       if (!loadmap()) { printf("error loading map\n"); return(2); }
       checknextwalls();
       saveasstl();
+
+      loadGeometry();
       return(0);
 
    };
