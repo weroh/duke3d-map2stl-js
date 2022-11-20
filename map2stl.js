@@ -28,6 +28,15 @@ function new_point3d() {
    return { x:0, y:0, z:0 };
 }
 
+//typedef struct { float x[4], y[2]; long pwal[2]; } zoid_t;
+function new_zoid_t() {
+   return {
+      x: [0, 0, 0, 0],
+      y: [0, 0],
+      pwal: [{}, {}] // Pointer in C++, but object here in JavaScript
+   };
+}
+
 var numsects=0;
 var sectorInfo=[];//static sect_t *sec;
 var b7sec;
@@ -35,10 +44,10 @@ var b7wal;
 var map2stl_output;
 
 
-function shellsrt(a, n)
+function shellsrt(a, n) // static void shellsrt (float *a, long n)
 {
-   var t=0;
-   var i=0, j=0, g=0;
+   var t=0;//float t;
+   var i=0, j=0, g=0;//long i, j, g;
 
    for(g=(n>>1);g;g>>=1)
       for(i=0;i<n-g;i++)
@@ -49,30 +58,53 @@ function shellsrt(a, n)
                a[j+g] = t;
             }
 }
-
+/*
+ * sect2trap()
+ * Not 100% sure what this does, but I believe it is converting sectors to trapezoids based on the name.
+ * It seems to be mainly used for filling roof + ceiling
+ */
 //typedef struct { float x[4], y[2]; long pwal[2]; } zoid_t;
-function sect2trap (wal, n, zoids)
+function sect2trap (wal, n, zoids) // static long sect2trap (wall_t *wal, long n, zoid_t **retzoids, long *retnzoids)
 {
+   //float f, x0, y0, x1, y1, sy0, sy1, cury, *secy = 0, *trapx0 = 0, *trapx1 = 0;
+   //long i, j, k, g, s, secn, ntrap, tot, zoidalloc, *pwal = 0;
+
    var f, x0, y0, x1, y1, sy0, sy1, cury, secy = [], trapx0 = [], trapx1 = [];
-   var i, j, k, g, s, secn, ntrap, tot, zoidalloc, pwal = [];
+   var i, j, k, g, s, secn, ntrap, tot, pwal = [];
 
    //(*zoids) = 0; (*retnzoids) = 0; 
    zoids.length = 0;
    if (n < 3) return(0);
 
-   for(i=n-1;i>=0;i--) {
-      //secy[i] = wal[i].y;
-      secy.push(wal[i].y);
+   // malloc here because this is traversed backwards
+   for (i=0;i<n;i++) {
+      secy.push(0);
+      trapx0.push(0);
+      trapx1.push(0);
+      pwal.push({});
    }
+
+   // Sort through these values and then...
+   for(i=n-1;i>=0;i--) secy[i] = wal[i].y;
    shellsrt(secy,n);
-   for(i=0,secn=0,cury=-1e32;i<n;i++) {//remove dups
+
+   // Remove duplicates? 
+   // NOTE: This doesn't seem to actually remove duplicates. Just uses secn to truncate it in the next loop
+   for(i=0,secn=0,cury=-1e32;i<n;i++) {
+      //console.log(secy[i] > cury, secy[i], cury);
       if (secy[i] > cury) {
          secy[secn++] = cury = secy[i];
       }
    }
 
-   zoidalloc = secn*2; //just a guess (not guaranteed to fit)
 
+   // Resize the zoids array by double the amount.
+   zoidalloc = secn*2; //just a guess (not guaranteed to fit)
+   for (i = 0;i<zoidalloc;i++) {
+      zoids.push(new_zoid_t());
+   }
+
+   // tot = Used for total "zoids"
    tot = 0;
    for(s=0;s<secn-1;s++)
    {
@@ -89,11 +121,7 @@ function sect2trap (wal, n, zoids)
          if ((y0 >= sy1) || (y1 <= sy0)) continue;
          if (y0 < sy0) x0 = (sy0-wal[i].y)*(wal[j].x-wal[i].x)/(wal[j].y-wal[i].y) + wal[i].x;
          if (y1 > sy1) x1 = (sy1-wal[i].y)*(wal[j].x-wal[i].x)/(wal[j].y-wal[i].y) + wal[i].x;
-         //trapx0[ntrap] = x0; trapx1[ntrap] = x1; pwal[ntrap] = wal[i]; ntrap++;
-         trapx0.push(x0);
-         trapx1.push(x1);
-         pwal.push(wal[i]);
-         ntrap++;
+         trapx0[ntrap] = x0; trapx1[ntrap] = x1; pwal[ntrap] = wal[i]; ntrap++;
       }
       for(g=(ntrap>>1);g;g>>=1) {
          for(i=0;i<ntrap-g;i++) {
@@ -106,50 +134,67 @@ function sect2trap (wal, n, zoids)
          }
       }
 
+      // Not enough space in zoids[] ? Add more...
+      if (tot+ntrap > zoidalloc)
+      {
+         zoidalloc <<= 1; if (tot+ntrap > zoidalloc) zoidalloc = tot+ntrap;
+         //zoids = (zoid_t *)realloc(zoids,zoidalloc*sizeof(zoid_t)); if (!zoids) goto badret;
+
+         // JS Replacement for realloc()
+         for (i=zoids.length;i<zoidalloc;i++) {
+            zoids.push(new_zoid_t());
+         }
+      }
       for(i=0;i<ntrap;i=j+1)
       {
-         j = i+1;
-         if ((trapx0[i+1] <= trapx0[i]) && (trapx1[i+1] <= trapx1[i])) continue;
+         j = i+1; if ((trapx0[i+1] <= trapx0[i]) && (trapx1[i+1] <= trapx1[i])) continue;
          while ((j+2 < ntrap) && (trapx0[j+1] <= trapx0[j]) && (trapx1[j+1] <= trapx1[j])) j += 2;
 
-         
-         // { float x[4], y[2]; long pwal[2]; }
-         var zoidTemp = { x:[0,0,0,0], y:[0,0], pwal:[0,0] };
-
-         zoidTemp.x[0] = trapx0[i]; zoidTemp.x[1] = trapx0[j]; zoidTemp.y[0] = sy0;
-         zoidTemp.x[3] = trapx1[i]; zoidTemp.x[2] = trapx1[j]; zoidTemp.y[1] = sy1;
-         zoidTemp.pwal[0] = pwal[i]; zoidTemp.pwal[1] = pwal[j];
-
-         zoids.push(zoidTemp);
-
+         // NOTE: This could be optimized using zoids.push() instead of setting by index...
+         zoids[tot].x[0] = trapx0[i]; zoids[tot].x[1] = trapx0[j]; zoids[tot].y[0] = sy0;
+         zoids[tot].x[3] = trapx1[i]; zoids[tot].x[2] = trapx1[j]; zoids[tot].y[1] = sy1;
+         zoids[tot].pwal[0] = pwal[i]; zoids[tot].pwal[1] = pwal[j];
          tot++;
       }
    }
-   return true;
+
+   // NOTE: This used to return true/false. False if we ran out of memory. 20 years later, that shouldn't happen anymore.
+   // It's important to return the true total because zoids isn't truncated. Maybe in a future optimization we'll truncate zoids[].
+   return tot;
 }
 
-function getslopez(s, i, x, y)
+function getslopez(s, i, x, y) // static float getslopez (sect_t *s, long i, float x, float y)
 {
-   //wall_t *wal = s.wall;
-   console.log(s);
    var wal = s.wall;
    return((wal[0].x-x)*s.grad[i].x + (wal[0].y-y)*s.grad[i].y + s.z[i]);
 }
 
-function getwalls (s, w, ver, maxverts)
+function getwalls (s, w, ver, maxverts) // static long getwalls (long s, long w, vertlist_t *ver, long maxverts)
 {
+   //vertlist_t tver;
+   //wall_t *wal, *wal2;
+   //float fx, fy;
+   //long i, j, k, bs, bw, nw, vn;
    var tver;
    var wal, wal2;
    var fx, fy;
    var i, j, k, bs, bw, nw, vn;
 
    wal = sectorInfo[s].wall; bs = wal[w].ns;
-   //if ((unsigned)bs >= (unsigned)numsects) return(0);
+
+   /*
+   Note: The following doesn't translate well in JavaScript
+   if ((unsigned)bs >= (unsigned)numsects) return(0);
+
+   casting (unsigned)bs will cause a -1 value to be much greater than numsects causing us to return 0
+   It seems negative values require us to eject. And values greater than numsects cause us to return 0
+   So we check this as two separate conditions now
+   */
    if (bs >= numsects) return(0);
    if (bs <= -1) return(0);
 
    vn = 0; nw = wal[w].n+w; bw = wal[w].nw;
-   while (bs != s)
+   do
    {
       wal2 = sectorInfo[bs].wall; i = wal2[bw].n+bw; //Make sure it's an opposite wall
       if ((wal[w].x == wal2[i].x) && (wal[nw].x == wal2[bw].x) &&
@@ -162,18 +207,13 @@ function getwalls (s, w, ver, maxverts)
       }
       bs = wal2[bw].ns;
       bw = wal2[bw].nw;
-   }
+   } while (bs != s);
 
       //Sort next sects by order of height in middle of wall (crap sort)
    fx = (wal[w].x+wal[nw].x)*0.5;
    fy = (wal[w].y+wal[nw].y)*0.5;
    for(k=1;k<vn;k++) {
       for(j=0;j<k;j++) {
-         console.log("...");
-         console.log("j:" + j + " k:" + k + " ver:" + ver);
-         console.log(sectorInfo[ver[j].s]);
-         console.log(sectorInfo[ver[k].s]);
-
          if (getslopez(sectorInfo[ver[j].s],0,fx,fy) + getslopez(sectorInfo[ver[j].s],1,fx,fy) >
              getslopez(sectorInfo[ver[k].s],0,fx,fy) + getslopez(sectorInfo[ver[k].s],1,fx,fy)) {
             tver = ver[j];
@@ -247,6 +287,11 @@ function normalize(pt0, pt1, pt2) {
    return result;
 }
 
+/*
+ * saveasstl()
+ * This function appears to take the stuff we have loaded from loadmap() and convert it into "Simple Triangle Soup"
+ * This is where all the action is
+ */
 function saveasstl (filnam)
 {
    const MAXVERTS = 256;
@@ -274,28 +319,27 @@ function saveasstl (filnam)
    for(s=0;s<numsects;s++)
    {
       //draw sector filled
-      for(isflor=0;isflor<2;isflor++)
+      // Draw Ceilings and Floors
+      //isflor=0; // CEILING
+      //isflor=1; // FLOOR
+      for(isflor=0;isflor<=1;isflor++)
       {
-         wal = sectorInfo[s].wall;
-         fz = sectorInfo[s].z[isflor];
-         grad = sectorInfo[s].grad[isflor];
-         n = sectorInfo[s].n;
+         wal = sectorInfo[s].wall; fz = sectorInfo[s].z[isflor]; grad = sectorInfo[s].grad[isflor]; n = sectorInfo[s].n;
 
-         //if (!sect2trap(wal,n,zoids)) continue;
-         sect2trap(wal,n,zoids);
+         // NOTE: This is done slightly differently than in map2stl.c
+         // We return nzoids here because it's easy. We're also not expecting memory to fail. So we aren't even checking for that anymore.
+         nzoids = sect2trap(wal,n,zoids);
 
-         for(i=0;i<zoids.length;i++)
+         for(i=0;i<nzoids;i++)
          {
             for(j=0,n=0;j<4;j++)
             {
                pol[n].x = zoids[i].x[j];
                pol[n].y = zoids[i].y[j>>1];
-
                if ((!n) || (pol[n].x != pol[n-1].x) || (pol[n].y != pol[n-1].y))
                {
                   pol[n].z = (wal[0].x-pol[n].x)*grad.x + (wal[0].y-pol[n].y)*grad.y + fz;
-                  pol[n].n = 1;
-                  n++;
+                  pol[n].n = 1; n++;
                }
             }
             if (n < 3) continue;
@@ -306,7 +350,6 @@ function saveasstl (filnam)
             {
                k = j-isflor;   fp[1].x = pol[k].x; fp[1].y = pol[k].y; fp[1].z = pol[k].z;
                k = j-1+isflor; fp[2].x = pol[k].x; fp[2].y = pol[k].y; fp[2].z = pol[k].z;
-
                //fp2 = unit norm
                fp2.x = (fp[1].y-fp[0].y)*(fp[2].z-fp[0].z) - (fp[1].z-fp[0].z)*(fp[2].y-fp[0].y);
                fp2.y = (fp[1].z-fp[0].z)*(fp[2].x-fp[0].x) - (fp[1].x-fp[0].x)*(fp[2].z-fp[0].z);
@@ -316,12 +359,12 @@ function saveasstl (filnam)
                //fwrite(&fp2,4*3,1,fil);
                //fwrite(fp,4*3*3,1,fil);
                //fwrite(tbuf,2,1,fil); //2 bytes of filler
-
-               //console.log(fp2, fp);
-               //console.log(wal);
-               map2stl_output.push({
+               write_map2stl_output({
+                  type: (isflor == 1) ? "floor" : "ceil",
                   normal: fp2,
-                  tri: fp,
+                  tri: [
+                     fp[2], fp[1], fp[0]
+                  ],
                   sec: s,
                   wal: w
                });
@@ -331,7 +374,8 @@ function saveasstl (filnam)
          //free(zoids);
       }
 
-      wal = sectorInfo[s].wall; wn = sectorInfo[s].n;
+      // Draw Walls
+      wal = sectorInfo[s].wall; wn = sectorInfo[s].n; // wn=numer of walls
       for(w=0;w<wn;w++)
       {
          nw = wal[w].n+w; vn = getwalls(s,w,verts,MAXVERTS);
@@ -344,9 +388,6 @@ function saveasstl (filnam)
             if (k >  0) { s0 = verts[k-1].s; cf0 = 1; } else { s0 = s; cf0 = 0; }
             if (k < vn) { s1 = verts[k  ].s; cf1 = 0; } else { s1 = s; cf1 = 1; }
 
-            //console.log(k, verts);
-            //console.log(s0, sectorInfo[s0]);
-            //console.log(s1, sectorInfo[s1]);
             pol[0].z = getslopez(sectorInfo[s0],cf0,pol[0].x,pol[0].y);
             pol[1].z = getslopez(sectorInfo[s0],cf0,pol[1].x,pol[1].y);
             pol[2].z = getslopez(sectorInfo[s1],cf1,pol[2].x,pol[2].y);
@@ -369,11 +410,15 @@ function saveasstl (filnam)
                //fwrite(fp,4*3*3,1,fil);
                //fwrite(tbuf,2,1,fil); //2 bytes of filler
 
-               //console.log(npol);
-               //console.log(fp2, fp);
-               map2stl_output.push({
+
+               //console.log(fp2,fp[2],fp[1],fp[0]);
+
+               write_map2stl_output({
+                  type: "wall",
                   normal: fp2,
-                  tri: fp,
+                  tri: [
+                     fp[2], fp[1], fp[0]
+                  ],
                   sec: s,
                   wal: w
                });
@@ -382,23 +427,30 @@ function saveasstl (filnam)
          }
       }
    }
-
-   console.log("done");
-   //i = ftell(fil);
-   //fseek(fil,80,SEEK_SET); fwrite(&numtris,4,1,fil);
-   //fseek(fil,i,SEEK_SET);
-   //fclose(fil);
 }
 
+/*
+ * write_map2stl_output()
+ * Since JavaScript will pass a lot of these things by reference, it is important that we explicitly copy everything
+ * That's all this function is doing. Copying variables into the map2stl_output variable.
+ */
+function write_map2stl_output(params) {
 
+   var result = {
+      type: params.type,
+      normal: new THREE.Vector3(),
+      tri: [
+         new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()
+      ],
+      sec: params.sec,
+      wal: params.wal
+   };
+   result.normal.copy(params.normal);
+   result.tri[0].copy(params.tri[0]);
+   result.tri[1].copy(params.tri[1]);
+   result.tri[2].copy(params.tri[2]);
 
-
-function write_vector(pt) {
-   printf(pt.x + "," + (-pt.z) + "," + pt.y);
-}
-
-function printf(txt) {
-   console.log(txt);
+   map2stl_output.push(result);
 }
 
 $("li.loadmap a").on("click", function(e) {
@@ -409,7 +461,7 @@ $("li.loadmap a").on("click", function(e) {
    dukemap.loadURL(filename);
    dukemap.onLoad = function() { // void main()
 
-      if (!loadmap()) { printf("error loading map\n"); return(2); }
+      loadmap();
       checknextwalls();
       saveasstl();
 
@@ -419,29 +471,26 @@ $("li.loadmap a").on("click", function(e) {
    };
 });
 
-
+/*
+ * loadmap()
+ * In the original version of map2stl, all the loading happened here
+ * In the JS version, we did most of our loading in our more general purpose dukemap.js
+ * This function is now designed to take the data extrated from dukemap and format it for
+ * use with map2stl
+ */
 function loadmap() {
    // Copy relevant sector info and walls to sectorInfo[]
    sectorInfo = [];
+
+   // By now we've pulled data using dukemap.js
+   // This converts sectors from the dukemap format to our map2stl format so we can process them in the saveasstl() function
    for (var i=0;i<dukemap.map.sectors.length;i++) {
       var b7sec = dukemap.map.sectors[i];
 
       // Create new sectorInfo
       sectorInfo.push(new_sect_t());
+      sectorInfo[i].sectorIndex = i;
       sectorInfo[i].n = b7sec.wallnum;
-
-      /*
-      for(j=0;j<2;j++) {
-         sectorInfo[i].z[j] = (b7sec.z[j])*(1 / (16));
-         sectorInfo[i].grad[j].x = sectorInfo[i].grad[j].y = 0;
-         if (b7sec.stat[j]&2) { //Enable slopes flag
-            sectorInfo[i].grad[j].y = b7sec.surf[j].heinum*(1/4096);
-         }
-
-         // Copy original sector info for textures and stuff
-         sectorInfo[i].orig = b7sec;
-      }
-      */
 
       sectorInfo[i].z[0] = (b7sec.ceilingz)*(1 / (16));
       sectorInfo[i].z[1] = (b7sec.floorz)*(1 / (16));
@@ -455,19 +504,12 @@ function loadmap() {
       }
    }
 
-   //fread(&s,2,1,fil); //numwalls
    numsects = dukemap.map.numsects;
    for(i=k=0;i<numsects;i++) {
       for(j=0;j<sectorInfo[i].n;j++,k++) {
          var startpos = dukemap.map.sectors[i].wallptr;
          var b7wal = dukemap.map.walls[k];
-         //fread(&b7wal,sizeof(b7wal),1,fil);
-         if (typeof b7wal === "undefined" || typeof b7wal.x === "undefined") {
-            console.log('error');
-         }
          sectorInfo[i].wall.push({
-            //x: b7wal.x*(1/512),
-            //y: b7wal.y*(1/512),
             x: b7wal.x,
             y: b7wal.y,
             n: b7wal.point2-k
@@ -504,6 +546,8 @@ function checknextwalls()
       {
          x0 = sectorInfo[s1].wall[w1].x;  y0 = sectorInfo[s1].wall[w1].y; w1n = sectorInfo[s1].wall[w1].n+w1;
          x1 = sectorInfo[s1].wall[w1n].x; y1 = sectorInfo[s1].wall[w1n].y;
+
+         $goto = false; // Little hack to simulate goto
          for(s0=0;s0<s1;s0++) {
             for(w0=0;w0<sectorInfo[s0].n;w0++) {
                if ((sectorInfo[s0].wall[w0].x == x1) && (sectorInfo[s0].wall[w0].y == y1))
@@ -515,6 +559,10 @@ function checknextwalls()
                      sectorInfo[s1].wall[w1].nw = w0;
                      sectorInfo[s0].wall[w0].ns = s1;
                      sectorInfo[s0].wall[w0].nw = w1;
+                     console.log("ns1: " + sectorInfo[s1].wall[w1].ns);
+                     console.log("nw1: " + sectorInfo[s1].wall[w1].nw);
+                     console.log("ns0: " + sectorInfo[s0].wall[w0].ns);
+                     console.log("nw0: " + sectorInfo[s0].wall[w0].nw);
                      $goto = true;
                   }
                }
