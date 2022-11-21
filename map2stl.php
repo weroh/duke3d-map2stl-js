@@ -13,7 +13,7 @@
 		foreach ($files as $filename) {
 			$pi = pathinfo($filename);
 
-			if (isset($pi['extension']) && strtolower($pi['extension']) == 'map') {
+				if (isset($pi['extension']) && strtolower($pi['extension']) == 'map') {
 				echo '<li class="loadmap"><a href="#" data-filename="map/' . $filename . '">' . $filename . '</a></li>';
 			}
 		}
@@ -26,6 +26,27 @@
 	<script src="three/three.min.js"></script>
 
 	<script>
+
+	const vertexShader = `
+	varying vec2 vUv;
+	attribute vec3 color;
+	varying vec3 vColor;
+	void main(){
+		vUv = uv;
+		vColor = color;
+		gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
+	}
+	`;
+
+	const fragmentShader = `
+	varying vec2 vUv;
+	varying vec3 vColor;
+	uniform sampler2D tex;
+	void main(){
+		vec4 shadeColor = vec4(vColor.rgb, 1.0);
+		gl_FragColor = shadeColor * texture2D(tex, vUv);
+	}
+	`;
 
 		var scene, renderer, camera;
 		var cube;
@@ -132,6 +153,24 @@
 			return tex_file;
 		}
 
+		function shade_to_float(shade) {
+			var s = shade + 128;
+			var ret = (s / 256);
+
+			// Invert
+			ret = 1 - ret;
+
+
+			// Contrast / Brightness
+			ret -= 0.25;
+			ret *= 3;
+
+			// Clamp
+			if (ret > 1) { ret = 1; }
+			if (ret < 0) { ret = 0; }
+			return parseFloat(ret);
+		}
+
 		// Loads from map2stl into threejs
 		function loadGeometry() {
 			const groups = {};
@@ -139,13 +178,17 @@
 			const verts = [];
 			//console.log(map2stl_output);
 			for (i=0;i<map2stl_output.length;i++) {
-				var item = map2stl_output[i];
+				const item = map2stl_output[i];
+				const surfsector = dukemap.map.sectors[item.sec];
+				const wall = item.wall;
 
 				let verts = [];
+				let color = [];
 				var positions = [];
 				let temp_normals = [];
 				let normals = [];
 				let uvs = [];
+
 
 				var p = convert_vec3d(item.normal);
 				//var p = item.normal;
@@ -163,7 +206,6 @@
 					verts.push(p.z);
 				}
 
-				var surfsector = dukemap.map.sectors[item.sec];
 				var picnum = 0;
 				var uv_scale_x = 512;
 				var uv_scale_y = 512;
@@ -171,29 +213,37 @@
 				var uv_offset_y = 0;
 				if (item.type == "wall") {
 					picnum = item.wal.orig.picnum;
-					//uv_scale_x = (4 * 8192) / item.wal.orig.xrepeat;
-					//uv_scale_y = (2 * 8192) / item.wal.orig.yrepeat;
-
-					//uv_offset_x = -item.wal.orig.xpanning;
-					//uv_offset_y = -item.wal.orig.ypanning;
-					/*
-					xyrepeat
-					1 = bigger
-					8 = smaller
-
-					y = 2* x
-					x = 1/2 y
-
-					16 = 512
-					8 = 1024
-					4 = 2048
-					*/
+					var rgb = shade_to_float(item.wal.orig.shade);
+					for (t=0;t<3;t++) {
+						color.push(rgb);
+						color.push(rgb);
+						color.push(rgb);
+					}
 				}
 				else if (item.type == "floor") {
 					picnum = surfsector.floorpicnum;
+					var rgb = shade_to_float(surfsector.ceilingshade);
+					for (t=0;t<3;t++) {
+						color.push(rgb);
+						color.push(rgb);
+						color.push(rgb);
+					}
 				}
 				else if (item.type == "ceil") {
 					picnum = surfsector.ceilingpicnum;
+					var rgb = shade_to_float(surfsector.floorshade);
+					for (t=0;t<3;t++) {
+						color.push(rgb);
+						color.push(rgb);
+						color.push(rgb);
+					}
+				}
+				else {
+					for (t=0;t<3;t++) {
+						color.push(1);
+						color.push(1);
+						color.push(1);
+					}
 				}
 
 				//if (Math.abs(item.normal.z) > Math.abs(item.normal.y) && Math.abs(item.normal.z) > Math.abs(item.normal.x)) { // ceiling and floor
@@ -234,8 +284,6 @@
 					positions.push(parseFloat(verts[x]));
 				}
 
-
-
 				//picnum = dukemap.map.sectors[sectorInd].ceilingpicnum;
 				var tex_file = get_tile_name(picnum);
 				
@@ -244,13 +292,16 @@
 						positions: [],
 						normals: [],
 						uvs: [],
+						color: []
 					};
 				}
 
 				groups[tex_file].positions.push(...positions);
 				groups[tex_file].normals.push(...normals);
 				groups[tex_file].uvs.push(...uvs);
+				groups[tex_file].color.push(...color);
 			}
+
 
 			for (var tex in groups) {
 
@@ -258,10 +309,11 @@
 				const positionNumComponents = 3;
 				const normalNumComponents = 3;
 				const uvNumComponents = 2;
-				//console.log(groups[tex].positions);
-				geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(groups[tex].positions), positionNumComponents));
-				geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(groups[tex].normals), normalNumComponents));
-				geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(groups[tex].uvs), uvNumComponents));
+
+				geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(groups[tex].positions), 3));
+				geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(groups[tex].normals), 3));
+				geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(groups[tex].uvs), 2));
+				geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(groups[tex].color), 3));
 
 				const color = 0xFFFFFF;
 
@@ -270,13 +322,25 @@
 				test_texture.magFilter = THREE.NearestFilter; // Magnify filter
 				test_texture.minFilter = THREE.NearestFilter; // Minimum filter
 
-
 				// Set this or the texture only repeats once
 				test_texture.wrapS = THREE.RepeatWrapping;
 				test_texture.wrapT = THREE.RepeatWrapping;
 
-
+				/*
 				const material = new THREE.MeshStandardMaterial({color: 0xffffff, map: test_texture}); // Maybe use MeshLambertMaterial for no specular highlights?
+				material.color = new THREE.Color(0xffffff);
+				*/
+
+				// NOTE: Alpha testing is done in the shader
+				const material = new THREE.ShaderMaterial({
+					vertexShader: vertexShader,
+					fragmentShader: fragmentShader,
+					//transparent: true,
+					uniforms: {
+						tex:   { type: "t", value: test_texture },
+						//,camQ: camQ
+					}
+				});
 				material.color = new THREE.Color(0xffffff);
 
 				const world_mesh = new THREE.Mesh(geometry, material);
@@ -293,10 +357,14 @@
 				const material = new THREE.SpriteMaterial({ map: test_texture });
 				material.color = new THREE.Color(0xffffff);
 
+
+				const sprite_sector = dukemap.map.sectors[sprite.sectnum];
+
 				const obj = new THREE.Sprite(material);
 				var pos = convert_vec3d(sprite);
 				obj.position.copy(pos);
-				obj.scale.set( 512, 512, 512 );
+				obj.position.y += sprite_sector.floorz;
+				obj.scale.set( sprite.clipdist * 16, sprite.clipdist * 16, sprite.clipdist * 16 );
 				scene.add(obj);
 			}
 
