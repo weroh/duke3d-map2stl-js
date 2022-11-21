@@ -7,19 +7,19 @@
 <body style="background: #ddd;color:#fff">
 	<script src="jquery.min.js"></script>
 
-	<ul>
+	<ul id="map-list">
 		<?php
-		$files = scandir('.');
+		$files = scandir('./map/');
 		foreach ($files as $filename) {
 			$pi = pathinfo($filename);
 
 			if (isset($pi['extension']) && strtolower($pi['extension']) == 'map') {
-				echo '<li class="loadmap"><a href="#" data-filename="' . $filename . '">' . $filename . '</a></li>';
+				echo '<li class="loadmap"><a href="#" data-filename="map/' . $filename . '">' . $filename . '</a></li>';
 			}
 		}
 		?>
 	</ul>
-
+	<p style="color:#000;">WASD to move. [Space] = go up. [C] = go down. Use arrow keys to look. [Esc] returns mouse. [Alt] + [Enter] = Full screen. Reload to try new map.</p>
 	<script src="dukemap.js"></script>
 	<script src="map2stl.js"></script>
 
@@ -30,11 +30,30 @@
 		var scene, renderer, camera;
 		var cube;
 		var controls;
+		var mapLoaded = false;
 
 
 		init();
 		animate();
 
+
+		$("li.loadmap a").on("click", function(e) {
+			e.preventDefault();
+			var filename = $(this).attr("data-filename");
+			$("#map-list").hide();
+			dukemap = Object.create(DukeMap);
+			dukemap.loadURL(filename);
+			dukemap.onLoad = function() { // void main()
+
+				loadmap();
+				checknextwalls();
+				saveasstl();
+
+				loadGeometry();
+
+				mapLoaded = true;
+			};
+		});
 		function init()
 		{
 			scene = new THREE.Scene();
@@ -177,7 +196,8 @@
 					picnum = surfsector.ceilingpicnum;
 				}
 
-				if (Math.abs(item.normal.z) > Math.abs(item.normal.y) && Math.abs(item.normal.z) > Math.abs(item.normal.x)) { // ceiling andfloor
+				//if (Math.abs(item.normal.z) > Math.abs(item.normal.y) && Math.abs(item.normal.z) > Math.abs(item.normal.x)) { // ceiling and floor
+				if (item.type == "ceil" || item.type == "floor") {
 					uvs.push(item.tri[0].y / uv_scale_x);
 					uvs.push(item.tri[0].x / uv_scale_y);
 					uvs.push(item.tri[1].y / uv_scale_x);
@@ -421,6 +441,20 @@
 			renderer.render(scene, camera);
 			requestAnimationFrame(animate);
 		}
+	    function openFullscreen() {
+			var elem = renderer.domElement;
+			if (elem.requestFullscreen) {
+				elem.requestFullscreen();
+			} else if (elem.mozRequestFullScreen) { /* Firefox */
+				elem.mozRequestFullScreen();
+			} else if (elem.webkitRequestFullscreen) { /* Chrome, Safari & Opera */
+				elem.webkitRequestFullscreen();
+			} else if (elem.msRequestFullscreen) { /* IE/Edge */
+				elem.msRequestFullscreen();
+			}
+			elem.style.width = '100%';
+			elem.style.height = '100%';
+	    }
 
 		// Keyboard events
 		function controls_keydown(event) {
@@ -435,6 +469,9 @@
 			}
 			else {
 				controls.keyCtrl = false;
+			}
+			if (event.keyCode == 13 && event.altKey) {
+				openFullscreen();
 			}
 			controls.keyStates[event.code] = true;
 			event.preventDefault();
@@ -459,6 +496,9 @@
 		document.addEventListener("keyup", controls_keyup);
 
 		function controls_mousedown(event) {
+			if (mapLoaded) {
+				document.body.requestPointerLock();
+			}
 			controls.mouseStates.left = true;
 		}
 		function controls_mouseup(event) {
