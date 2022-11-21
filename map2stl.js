@@ -420,7 +420,7 @@ function saveasstl (filnam)
                      fp[2], fp[1], fp[0]
                   ],
                   sec: s,
-                  wal: w
+                  wal: wal[w]
                });
                numtris++;
             }
@@ -512,7 +512,10 @@ function loadmap() {
          sectorInfo[i].wall.push({
             x: b7wal.x,
             y: b7wal.y,
-            n: b7wal.point2-k
+            n: b7wal.point2-k,
+
+            // Added orig so we can extract wall textures and other attributes later...
+            orig: b7wal
          });
       }
 
@@ -559,10 +562,6 @@ function checknextwalls()
                      sectorInfo[s1].wall[w1].nw = w0;
                      sectorInfo[s0].wall[w0].ns = s1;
                      sectorInfo[s0].wall[w0].nw = w1;
-                     console.log("ns1: " + sectorInfo[s1].wall[w1].ns);
-                     console.log("nw1: " + sectorInfo[s1].wall[w1].nw);
-                     console.log("ns0: " + sectorInfo[s0].wall[w0].ns);
-                     console.log("nw0: " + sectorInfo[s0].wall[w0].nw);
                      $goto = true;
                   }
                }

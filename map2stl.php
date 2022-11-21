@@ -19,19 +19,11 @@
 		}
 		?>
 	</ul>
-	<a id="test-txt" href="#">Test TXT File</a>
-	(See Browser Console for output)
-
-	<h3>Compare</h3>
-	<textarea id="compare1"></textarea><textarea id="compare2"></textarea>
-	<button>Compare</button>
 
 	<script src="dukemap.js"></script>
 	<script src="map2stl.js"></script>
 
 	<script src="three/three.min.js"></script>
-	<script src="three/FlyControls.js"></script>
-	<script src="three/OrbitControls.js"></script>
 
 	<script>
 
@@ -58,9 +50,20 @@
 			camera.rotation.order = 'YXZ';
 			//camera.position.y = 160;
 			//camera.position.z = -400;
+
+			// E1L1
 			camera.position.x = 9161.288354044362;
 			camera.position.y = 160;
 			camera.position.z = 45738.39795404206;
+
+			/*
+			//test map
+			camera.position.x = 1173.0146677060202;
+			camera.position.y = 160;
+			camera.position.z = -172.18099228472315;
+			*/
+
+
 			camera.lookAt(new THREE.Vector3(0,0,0));
 
 			const useFlyControls = false;
@@ -110,147 +113,6 @@
 			return tex_file;
 		}
 
-		$("#test-txt").on("click", function(e) {
-			e.preventDefault();
-
-			$.get("E1L1-full.txt", function(text) {
-				const groups = {};
-
-				let lines = text.split("\n");
-				//console.log(lines);
-				let line_count = lines.length;
-				//const positions = [];
-				for (let i=0;i<line_count;i++) {
-					//-0.000000,-0.000000,1.000000|28.000000,86.000000,-4.875000|26.500000,87.000000,-4.875000|26.777779,87.000000,-4.875000|
-					//normalxyz|xyz|xyz|xyz
-
-					let parts = lines[i].split("|");
-					let verts = [];
-					var positions = [];
-					let temp_normals = [];
-					let normals = [];
-					let uvs = [];
-					if (typeof parts[3] !== "undefined") {
-						parts[0] = parts[0].split(",");
-						parts[1] = parts[1].split(",");
-						parts[2] = parts[2].split(",");
-						parts[3] = parts[3].split(",");
-
-						temp_normals = parts[0];
-						verts.push(...parts[1]);
-						verts.push(...parts[2]);
-						verts.push(...parts[3]);
-					}
-					normals.push(parseFloat(temp_normals[0]));
-					normals.push(parseFloat(temp_normals[1]));
-					normals.push(parseFloat(temp_normals[2]));
-					normals.push(parseFloat(temp_normals[0]));
-					normals.push(parseFloat(temp_normals[1]));
-					normals.push(parseFloat(temp_normals[2]));
-					normals.push(parseFloat(temp_normals[0]));
-					normals.push(parseFloat(temp_normals[1]));
-					normals.push(parseFloat(temp_normals[2]));
-					for (const x in verts) {
-						positions.push(parseFloat(verts[x]));
-					}
-
-					if (Math.abs(temp_normals[1]) > Math.abs(temp_normals[0]) && Math.abs(temp_normals[1]) > Math.abs(temp_normals[2])) { // floor and ceiling
-						uvs.push(parts[1][0] / 512);
-						uvs.push(parts[1][2] / 512);
-						uvs.push(parts[2][0] / 512);
-						uvs.push(parts[2][2] / 512);
-						uvs.push(parts[3][0] / 512);
-						uvs.push(parts[3][2] / 512);
-					}
-					else if (Math.abs(temp_normals[0]) > Math.abs(temp_normals[1]) && Math.abs(temp_normals[0]) > Math.abs(temp_normals[2])) { // standing wall
-						uvs.push(parts[1][1] / 512);
-						uvs.push(parts[1][2] / 512);
-						uvs.push(parts[2][1] / 512);
-						uvs.push(parts[2][2] / 512);
-						uvs.push(parts[3][1] / 512);
-						uvs.push(parts[3][2] / 512);
-					}
-					else if (Math.abs(temp_normals[2]) > Math.abs(temp_normals[1]) && Math.abs(temp_normals[2]) > Math.abs(temp_normals[0])) { // standing wall
-						uvs.push(parts[1][1] / 512);
-						uvs.push(parts[1][0] / 512);
-						uvs.push(parts[2][1] / 512);
-						uvs.push(parts[2][0] / 512);
-						uvs.push(parts[3][1] / 512);
-						uvs.push(parts[3][0] / 512);
-					}
-					else {
-						uvs.push(0 / 512);
-						uvs.push(0 / 512);
-						uvs.push(0 / 512);
-						uvs.push(0 / 512);
-						uvs.push(0 / 512);
-						uvs.push(0 / 512);
-					}
-
-
-
-					var picnum1 = parseInt(parts[4]);
-					var picnum2 = parseInt(parts[5]);
-					if (!isNaN(picnum1) && !isNaN(picnum2)) {
-						picnum1 = parseInt(picnum1);
-						picnum2 = parseInt(picnum2);
-
-
-						//var tex_file = 'TILES' + ('000'+picnum2).slice(-3);
-						//tex_file += "_" + picnum1;
-						var tex_file = get_tile_name(picnum1);
-						
-						if (typeof groups[tex_file] === "undefined") {
-							groups[tex_file] = {
-								positions: [],
-								normals: [],
-								uvs: [],
-							};
-						}
-
-						groups[tex_file].positions.push(...positions);
-						groups[tex_file].normals.push(...normals);
-						groups[tex_file].uvs.push(...uvs);
-					}
-				}
-
-
-				for (var tex in groups) {
-
-					const geometry = new THREE.BufferGeometry();
-					const positionNumComponents = 3;
-					const normalNumComponents = 3;
-					const uvNumComponents = 2;
-					//console.log(groups[tex].positions);
-					geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(groups[tex].positions), positionNumComponents));
-					geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(groups[tex].normals), normalNumComponents));
-					geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(groups[tex].uvs), uvNumComponents));
-
-					const color = 0xFFFFFF;
-
-					const loader = new THREE.TextureLoader();
-					const test_texture = loader.load('duke-tex/' + tex + '.png');
-					test_texture.magFilter = THREE.NearestFilter; // Magnify filter
-					test_texture.minFilter = THREE.NearestFilter; // Minimum filter
-
-
-					// Set this or the texture only repeats once
-					test_texture.wrapS = THREE.RepeatWrapping;
-					test_texture.wrapT = THREE.RepeatWrapping;
-
-
-					const material = new THREE.MeshStandardMaterial({color: 0xffffff, map: test_texture}); // Maybe use MeshLambertMaterial for no specular highlights?
-					material.color = new THREE.Color(0xffffff);
-
-					const world_mesh = new THREE.Mesh(geometry, material);
-					scene.add(world_mesh);
-
-				}
-
-				console.log("Done.");
-			});
-		});
-
 		// Loads from map2stl into threejs
 		function loadGeometry() {
 			const groups = {};
@@ -282,59 +144,79 @@
 					verts.push(p.z);
 				}
 
-				if (Math.abs(item.normal.y) > Math.abs(item.normal.x) && Math.abs(item.normal.y) > Math.abs(item.normal.z)) { // standing wall
-					uvs.push(item.tri[0].x / 512);
-					uvs.push(-item.tri[0].z / 512);
-					uvs.push(item.tri[1].x / 512);
-					uvs.push(-item.tri[1].z / 512);
-					uvs.push(item.tri[2].x / 512);
-					uvs.push(-item.tri[2].z / 512);
+				var surfsector = dukemap.map.sectors[item.sec];
+				var picnum = 0;
+				var uv_scale_x = 512;
+				var uv_scale_y = 512;
+				var uv_offset_x = 0;
+				var uv_offset_y = 0;
+				if (item.type == "wall") {
+					picnum = item.wal.orig.picnum;
+					//uv_scale_x = (4 * 8192) / item.wal.orig.xrepeat;
+					//uv_scale_y = (2 * 8192) / item.wal.orig.yrepeat;
+
+					//uv_offset_x = -item.wal.orig.xpanning;
+					//uv_offset_y = -item.wal.orig.ypanning;
+					/*
+					xyrepeat
+					1 = bigger
+					8 = smaller
+
+					y = 2* x
+					x = 1/2 y
+
+					16 = 512
+					8 = 1024
+					4 = 2048
+					*/
 				}
-				else if (Math.abs(item.normal.x) > Math.abs(item.normal.y) && Math.abs(item.normal.x) > Math.abs(item.normal.z)) { // standing wall
-					uvs.push(item.tri[0].y / 512);
-					uvs.push(-item.tri[0].z / 512);
-					uvs.push(item.tri[1].y / 512);
-					uvs.push(-item.tri[1].z / 512);
-					uvs.push(item.tri[2].y / 512);
-					uvs.push(-item.tri[2].z / 512);
+				else if (item.type == "floor") {
+					picnum = surfsector.floorpicnum;
 				}
-				else if (Math.abs(item.normal.z) > Math.abs(item.normal.y) && Math.abs(item.normal.z) > Math.abs(item.normal.x)) { // ceiling andfloor
-					uvs.push(item.tri[0].y / 512);
-					uvs.push(item.tri[0].x / 512);
-					uvs.push(item.tri[1].y / 512);
-					uvs.push(item.tri[1].x / 512);
-					uvs.push(item.tri[2].y / 512);
-					uvs.push(item.tri[2].x / 512);
+				else if (item.type == "ceil") {
+					picnum = surfsector.ceilingpicnum;
 				}
-				else {
-					uvs.push(0 / 512);
-					uvs.push(0 / 512);
-					uvs.push(0 / 512);
-					uvs.push(0 / 512);
-					uvs.push(0 / 512);
-					uvs.push(0 / 512);
+
+				if (Math.abs(item.normal.z) > Math.abs(item.normal.y) && Math.abs(item.normal.z) > Math.abs(item.normal.x)) { // ceiling andfloor
+					uvs.push(item.tri[0].y / uv_scale_x);
+					uvs.push(item.tri[0].x / uv_scale_y);
+					uvs.push(item.tri[1].y / uv_scale_x);
+					uvs.push(item.tri[1].x / uv_scale_y);
+					uvs.push(item.tri[2].y / uv_scale_x);
+					uvs.push(item.tri[2].x / uv_scale_y);
+				}
+				else if (Math.abs(item.normal.y) > Math.abs(item.normal.x) && Math.abs(item.normal.y) > Math.abs(item.normal.z)) { // standing wall
+					uvs.push((item.tri[0].x  / uv_scale_x) + (uv_offset_x / 512));
+					uvs.push((-item.tri[0].z / uv_scale_y) + (uv_offset_y / 512));
+					uvs.push((item.tri[1].x  / uv_scale_x) + (uv_offset_x / 512));
+					uvs.push((-item.tri[1].z / uv_scale_y) + (uv_offset_y / 512));
+					uvs.push((item.tri[2].x  / uv_scale_x) + (uv_offset_x / 512));
+					uvs.push((-item.tri[2].z / uv_scale_y) + (uv_offset_y / 512));
+				}
+				// NOTE: We do greater-than-equals here because it accounts for a 45 degree wall.
+				else if (Math.abs(item.normal.x) >= Math.abs(item.normal.y) && Math.abs(item.normal.x) > Math.abs(item.normal.z)) { // standing wall
+					uvs.push((item.tri[0].y  / uv_scale_x) + (uv_offset_x / 512));
+					uvs.push((-item.tri[0].z / uv_scale_y) + (uv_offset_y / 512));
+					uvs.push((item.tri[1].y  / uv_scale_x) + (uv_offset_x / 512));
+					uvs.push((-item.tri[1].z / uv_scale_y) + (uv_offset_y / 512));
+					uvs.push((item.tri[2].y  / uv_scale_x) + (uv_offset_x / 512));
+					uvs.push((-item.tri[2].z / uv_scale_y) + (uv_offset_y / 512));
+				}
+				else { // ????
+					uvs.push(0);
+					uvs.push(0);
+					uvs.push(0);
+					uvs.push(0);
+					uvs.push(0);
+					uvs.push(0);
 				}
 				for (const x in verts) {
 					positions.push(parseFloat(verts[x]));
 				}
 
 
-				var sectorInd = item.sec;
-				var wallInd = item.wal;
-				var picnum = 0;
-				if (item.type == "wall") {
-					picnum = dukemap.map.walls[wallInd].picnum;
-				}
-				else if (item.type == "floor") {
-					picnum = dukemap.map.sectors[sectorInd].floorpicnum;
-				}
-				else if (item.type == "ceil") {
-					picnum = dukemap.map.sectors[sectorInd].ceilingpicnum;
-				}
 
 				//picnum = dukemap.map.sectors[sectorInd].ceilingpicnum;
-
-
 				var tex_file = get_tile_name(picnum);
 				
 				if (typeof groups[tex_file] === "undefined") {
