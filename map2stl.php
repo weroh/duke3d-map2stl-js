@@ -284,37 +284,21 @@
 
 			}
 
-			/*
-			for (var tex in groups) {
-
-				const geometry = new THREE.BufferGeometry();
-				const positionNumComponents = 3;
-				const normalNumComponents = 3;
-				const uvNumComponents = 2;
-				geometry.setAttribute('position', new THREE.BufferAttribute(new Float32Array(groups[tex].positions), positionNumComponents));
-				geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(groups[tex].normals), normalNumComponents));
-				geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(groups[tex].uvs), uvNumComponents));
-
-				const color = 0xFFFFFF;
-
-				const loader = new THREE.TextureLoader();
-				const test_texture = loader.load('testassets/img/' + tex + '.png');
+			for (i=0;i<dukemap.map.sprites.length;i++) {
+				const sprite = dukemap.map.sprites[i];
+				const tex = get_tile_name(sprite.picnum);
+				const test_texture = new THREE.TextureLoader().load('duke-tex/' + tex + '.png');
 				test_texture.magFilter = THREE.NearestFilter; // Magnify filter
 				test_texture.minFilter = THREE.NearestFilter; // Minimum filter
+				const material = new THREE.SpriteMaterial({ map: test_texture });
+				material.color = new THREE.Color(0xffffff);
 
-
-				// Set this or the texture only repeats once
-				test_texture.wrapS = THREE.RepeatWrapping;
-				test_texture.wrapT = THREE.RepeatWrapping;
-
-
-				const material = new THREE.MeshStandardMaterial({color, map: test_texture}); // Maybe use MeshLambertMaterial for no specular highlights?
-
-				const world_mesh = new THREE.Mesh(geometry, material);
-				this.scene.add(world_mesh);
-
+				const obj = new THREE.Sprite(material);
+				var pos = convert_vec3d(sprite);
+				obj.position.copy(pos);
+				obj.scale.set( 512, 512, 512 );
+				scene.add(obj);
 			}
-			*/
 
 		}
 
@@ -324,14 +308,6 @@
 			ret.y = -pt.z;
 			ret.z = pt.y;
 			return ret;
-
-			/*
-			fprintf(fil, "%f", pt.x);
-			fwrite(",", 1, 1, fil);
-			fprintf(fil, "%f", -pt.z);
-			fwrite(",", 1, 1, fil);
-			fprintf(fil, "%f", pt.y);
-			*/
 		}
 
 

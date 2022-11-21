@@ -207,8 +207,6 @@ function getwalls (s, w, ver, maxverts) // static long getwalls (long s, long w,
 		}
 		bs = wal2[bw].ns;
 		bw = wal2[bw].nw;
-
-    console.log(bs, s);
 	} while (bs != s);
 
 		//Sort next sects by order of height in middle of wall (crap sort)

@@ -165,7 +165,7 @@ var DukeMap = {
         }
 
         self.map.numsprites = self.read("UINT16LE");
-        self.map.numsprites = [];
+        self.map.sprites = [];
         for (i=0;i<self.map.numsprites;i++) {
           self.map.sprites.push(self.read_sprite());
         }
