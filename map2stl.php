@@ -27,26 +27,50 @@
 
 	<script>
 
-	const vertexShader = `
-	varying vec2 vUv;
-	attribute vec3 color;
-	varying vec3 vColor;
-	void main(){
-		vUv = uv;
-		vColor = color;
-		gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0);
-	}
-	`;
+		const vertexShader = `
+		//#define USE_FOG
+		varying vec2 vUv;
+		attribute vec3 color;
+		attribute float afognear;
+		attribute float afogfar;
+		varying vec3 vColor;
 
-	const fragmentShader = `
-	varying vec2 vUv;
-	varying vec3 vColor;
-	uniform sampler2D tex;
-	void main(){
-		vec4 shadeColor = vec4(vColor.rgb, 1.0);
-		gl_FragColor = shadeColor * texture2D(tex, vUv);
-	}
-	`;
+		varying vec4 fogColor;
+		varying float fogNear;
+		varying float fogFar;
+		#include <fog_pars_vertex>
+		void main(){
+			vUv = uv;
+			vColor = color;
+
+			fogColor = vec4(0.5, 0.5, 0.5, 0.0);
+			fogNear = 1000.0;
+			fogFar = 1000000.0;
+
+
+	        vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+	        gl_Position = projectionMatrix * mvPosition;
+	        
+	        //fogDepth = - mvPosition.z;
+
+
+			#include <fog_vertex>
+		}
+		`;
+
+		const fragmentShader = `
+		//#define USE_FOG
+		varying vec2 vUv;
+		varying vec3 vColor;
+		uniform sampler2D tex;
+
+		#include <fog_pars_fragment>
+		void main(){
+			vec4 shadeColor = vec4(vColor.rgb, 1.0);
+			gl_FragColor = shadeColor * texture2D(tex, vUv);
+			#include <fog_fragment>
+		}
+		`;
 
 		var scene, renderer, camera;
 		var cube;
@@ -154,21 +178,23 @@
 		}
 
 		function shade_to_float(shade) {
+			/*
 			var s = shade + 128;
 			var ret = (s / 256);
 
 			// Invert
 			ret = 1 - ret;
+			*/
 
-
-			// Contrast / Brightness
-			ret -= 0.25;
-			ret *= 3;
+			var s = 32 - shade;
 
 			// Clamp
-			if (ret > 1) { ret = 1; }
-			if (ret < 0) { ret = 0; }
-			return parseFloat(ret);
+			if (s > 32) { s = 32; }
+			if (s < 0) { s = 0; }
+
+			s = s / 32;
+
+			return parseFloat(s);
 		}
 
 		// Loads from map2stl into threejs
@@ -189,6 +215,7 @@
 				let normals = [];
 				let uvs = [];
 
+				//let fog = new THREE.Fog(0x000000, 0, 3000);
 
 				var p = convert_vec3d(item.normal);
 				//var p = item.normal;
@@ -213,6 +240,11 @@
 				var uv_offset_y = 0;
 				if (item.type == "wall") {
 					picnum = item.wal.orig.picnum;
+					if (item.wal.orig.overpicnum != 0) {
+						picnum = item.wal.orig.overpicnum;
+						//console.log(item.wal.orig.overpicnum);
+						//console.log(get_tile_name(picnum));
+					}
 					var rgb = shade_to_float(item.wal.orig.shade);
 					for (t=0;t<3;t++) {
 						color.push(rgb);
@@ -222,7 +254,7 @@
 				}
 				else if (item.type == "floor") {
 					picnum = surfsector.floorpicnum;
-					var rgb = shade_to_float(surfsector.ceilingshade);
+					var rgb = shade_to_float(surfsector.floorshade);
 					for (t=0;t<3;t++) {
 						color.push(rgb);
 						color.push(rgb);
@@ -231,7 +263,7 @@
 				}
 				else if (item.type == "ceil") {
 					picnum = surfsector.ceilingpicnum;
-					var rgb = shade_to_float(surfsector.floorshade);
+					var rgb = shade_to_float(surfsector.ceilingshade);
 					for (t=0;t<3;t++) {
 						color.push(rgb);
 						color.push(rgb);
@@ -292,7 +324,9 @@
 						positions: [],
 						normals: [],
 						uvs: [],
-						color: []
+						color: [],
+						fognear: [],
+						fogfar: [],
 					};
 				}
 
@@ -300,6 +334,8 @@
 				groups[tex_file].normals.push(...normals);
 				groups[tex_file].uvs.push(...uvs);
 				groups[tex_file].color.push(...color);
+				//groups[tex_file].fognear.push(...fognear);
+				//groups[tex_file].fogfar.push(...fogfar);
 			}
 
 
@@ -314,6 +350,8 @@
 				geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(groups[tex].normals), 3));
 				geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(groups[tex].uvs), 2));
 				geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(groups[tex].color), 3));
+				//geometry.setAttribute('afognear', new THREE.BufferAttribute(new Float32Array(groups[tex].fognear), 3));
+				//geometry.setAttribute('afogfar', new THREE.BufferAttribute(new Float32Array(groups[tex].fogfar), 3));
 
 				const color = 0xFFFFFF;
 
@@ -338,7 +376,12 @@
 					//transparent: true,
 					uniforms: {
 						tex:   { type: "t", value: test_texture },
-						//,camQ: camQ
+
+						/*
+						fogColor:    { type: "c", value: fog.color },
+						fogNear:     { type: "f", value: fog.near },
+						fogFar:      { type: "f", value: fog.far }
+						*/
 					}
 				});
 				material.color = new THREE.Color(0xffffff);
@@ -357,13 +400,12 @@
 				const material = new THREE.SpriteMaterial({ map: test_texture });
 				material.color = new THREE.Color(0xffffff);
 
-
 				const sprite_sector = dukemap.map.sectors[sprite.sectnum];
 
 				const obj = new THREE.Sprite(material);
 				var pos = convert_vec3d(sprite);
 				obj.position.copy(pos);
-				obj.position.y += sprite_sector.floorz;
+				obj.position.y = sprite_sector.floorz + pos.y;
 				obj.scale.set( sprite.clipdist * 16, sprite.clipdist * 16, sprite.clipdist * 16 );
 				scene.add(obj);
 			}
@@ -549,8 +591,10 @@
 			controls.mouseStates.left = false;
 		}
 		function controls_mousemove(event) {
-			camera.rotationY -= event.movementX / 500;
-			camera.rotationX -= event.movementY / 500;
+			if (document.pointerLockElement === document.body) {
+				camera.rotationY -= event.movementX / 500;
+				camera.rotationX -= event.movementY / 500;
+			}
 		}
 		document.addEventListener("mousedown", controls_mousedown);
 		document.addEventListener("mouseup", controls_mouseup);
