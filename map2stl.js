@@ -1,5 +1,10 @@
 "use strict";
 
+let sectorInfo=[];//static sect_t *sec;
+let b7sec;
+let b7wal;
+let map2stl_output;
+
 function new_point3d() { // typedef struct { float x, y, z; } point3d;
   return { x:0, y:0, z:0 };
 }
@@ -35,12 +40,6 @@ function new_zoid_t() { //typedef struct { float x[4], y[2]; long pwal[2]; } zoi
 	};
 }
 
-var sectorInfo=[];//static sect_t *sec;
-var b7sec;
-var b7wal;
-var map2stl_output;
-
-
 function remove_duplicates(arr) {
 	return arr.filter((c, index) => {
 		return arr.indexOf(c) === index;
@@ -52,11 +51,7 @@ function remove_duplicates(arr) {
  * Not 100% sure what this does, but I believe it is converting sectors to trapezoids based on the name.
  * It seems to be mainly used for filling roof + ceiling
  */
-//typedef struct { float x[4], y[2]; long pwal[2]; } zoid_t;
 function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long n, zoid_t **retzoids, long *retnzoids)
-	//float f, x0, y0, x1, y1, sy0, sy1, *sector_y = 0, *trapx0 = 0, *trapx1 = 0;
-	//long i, j, k, g, s, ntrap, zoidalloc, *pwal = 0;
-
 	let sector_y = [], trapx0 = [], trapx1 = [];
 	let pwal = [];
 
@@ -292,21 +287,16 @@ function saveasstl() {
 
   // Output Geometry
 	let tri = [new_point3d(),new_point3d(),new_point3d()], normal = new_point3d();
-	let grad;
-	let wal;
 	let zoids = [];
-	let fil;
-	let f, fz;
-	let i=0, j=0, k=0, n=0, w=0, s=0, nw=0, vn=0, s0=0, cf0=0, s1=0, cf1=0, is_floor=0;
-	let numtris = 0;
+	let f;
 
 	// This is our intermediate format before converting to obj or whatever
 	map2stl_output = [];
 
-	for(s=0; s<dukemap.map.numsects; s++) {
+	for(let s=0; s<dukemap.map.numsects; s++) {
 
-		wal = sectorInfo[s].wall;
-		n = sectorInfo[s].wallcount;
+		let wal = sectorInfo[s].wall;
+		let n = sectorInfo[s].wallcount;
 
 		// NOTE: This is done slightly differently than in map2stl.c
 		// We return nzoids here because it's easy. We're also not expecting memory to fail. So we aren't even checking for that anymore.
@@ -316,13 +306,13 @@ function saveasstl() {
 		//draw sector filled - Ceilings and Floors first
 		//is_floor=0; // CEILING
 		//is_floor=1; // FLOOR
-		for(is_floor=0; is_floor<=1; is_floor++) {
-			fz = sectorInfo[s].z[is_floor];
-			grad = sectorInfo[s].grad[is_floor];
+		for(let is_floor=0; is_floor<=1; is_floor++) {
+			let fz = sectorInfo[s].z[is_floor];
+			let grad = sectorInfo[s].grad[is_floor];
 
-			for(i=0; i<nzoids; i++) {
+			for(let i=0; i<nzoids; i++) {
         n=0;
-				for(j=0; j<4; j++) {
+				for(let j=0; j<4; j++) {
 					pol[n].x = zoids[i].x[j];
 					pol[n].y = zoids[i].y[j>>1];
 
@@ -338,8 +328,8 @@ function saveasstl() {
 				tri[0].y = pol[0].y;
 				tri[0].z = pol[0].z;
 
-				for(j=2;j<n;j++) {
-					k = j-is_floor;   
+				for(let j=2;j<n;j++) {
+					let k = j-is_floor;   
           tri[1].x = pol[k].x;
           tri[1].y = pol[k].y;
           tri[1].z = pol[k].z;
@@ -357,27 +347,29 @@ function saveasstl() {
 						tri: [
 							tri[2], tri[1], tri[0]
 						],
-						sec: s,
-						wal: w
+						sec: s
 					});
-					numtris++;
 				}
 			}
 		}
 
 		// Draw Walls
-		wal = sectorInfo[s].wall; 
+		//wal = sectorInfo[s].wall; 
 		let wn = sectorInfo[s].wallcount; // wn=numer of walls
-		for(w=0; w<wn; w++) {
-			nw = wal[w].n+w;
-			vn = getwalls(s,w,verts,MAXVERTS);
+		for(let w=0; w<wn; w++) {
+			let nw = wal[w].n+w;
+			let vn = getwalls(s,w,verts,MAXVERTS);
 
 			pol[0].x = wal[ w].x; pol[0].y = wal[ w].y; pol[0].n = 1;
 			pol[1].x = wal[nw].x; pol[1].y = wal[nw].y; pol[1].n = 1;
 			pol[2].x = wal[nw].x; pol[2].y = wal[nw].y; pol[2].n = 1;
 			pol[3].x = wal[ w].x; pol[3].y = wal[ w].y; pol[3].n =-3;
 
-			for(k=0;k<=vn;k++) { //Warning: do not reverse for loop!
+			for(let k=0;k<=vn;k++) { //Warning: do not reverse for loop!
+				let s0 = 0;
+				let s1 = 0;
+				let cf0 = 0;
+				let cf1 = 0;
 				if (k >  0) { s0 = verts[k-1].s; cf0 = 1; } else { s0 = s; cf0 = 0; }
 				if (k < vn) { s1 = verts[k  ].s; cf1 = 0; } else { s1 = s; cf1 = 1; }
 
@@ -406,7 +398,6 @@ function saveasstl() {
 						sec: s,
 						wal: wal[w]
 					});
-					numtris++;
 				}
 			}
 		}
@@ -498,7 +489,6 @@ function loadmap() {
 }
 
 function checknextwalls() {
-	//let s0, w0, w0n, s1, w1;
 	let $goto = false;
 
 	//Clear all nextsect/nextwalls
