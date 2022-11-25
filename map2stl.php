@@ -26,27 +26,27 @@
 	<script src="three/three.min.js"></script>
 
 	<script>
+		const fog = new THREE.Fog(0x000000, 0, 20000);
 
 		const vertexShader = `
 		//#define USE_FOG
 		varying vec2 vUv;
 		attribute vec3 color;
-		attribute float afognear;
-		attribute float afogfar;
+		attribute float fognear;
+		attribute float fogfar;
 		varying vec3 vColor;
+		varying float vfognear;
+		varying float vfogfar;
 
-		varying vec4 fogColor;
-		varying float fogNear;
-		varying float fogFar;
-		#include <fog_pars_vertex>
+		//<fog_pars_vertex> modified
+		varying float vFogDepth;
+
 		void main(){
 			vUv = uv;
 			vColor = color;
 
-			fogColor = vec4(0.5, 0.5, 0.5, 0.0);
-			fogNear = 1000.0;
-			fogFar = 1000000.0;
-
+			vfognear = fognear;
+			vfogfar = fogfar;
 
 	        vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
 	        gl_Position = projectionMatrix * mvPosition;
@@ -54,7 +54,8 @@
 	        //fogDepth = - mvPosition.z;
 
 
-			#include <fog_vertex>
+			//#include <fog_vertex>
+			vFogDepth = - mvPosition.z;
 		}
 		`;
 
@@ -64,11 +65,30 @@
 		varying vec3 vColor;
 		uniform sampler2D tex;
 
-		#include <fog_pars_fragment>
+		// <fog_pars_fragment> modified
+		uniform vec3 fogColor;
+		varying float vFogDepth;
+
+		// modified fog
+		varying float vfognear;
+		varying float vfogfar;
+
 		void main(){
 			vec4 shadeColor = vec4(vColor.rgb, 1.0);
 			gl_FragColor = shadeColor * texture2D(tex, vUv);
-			#include <fog_fragment>
+
+			// <fog_fragment>			
+			float fogFactor = smoothstep( vfognear, vfogfar, vFogDepth );
+			//gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
+			vec3 finalColor =  mix( gl_FragColor.rgb, fogColor, fogFactor );
+
+			//float gr = (finalColor.r + finalColor.g + finalColor.b) * 0.3333333333333;
+			//gl_FragColor.rgb = vec3(finalColor.g, finalColor.b, finalColor.r);
+			//gl_FragColor.rgb = vec3(gr, gr, gr);
+			//gl_FragColor.rgb = vec3(finalColor.b, finalColor.g, finalColor.r);
+
+			gl_FragColor.rgb = finalColor;
+			
 		}
 		`;
 
@@ -95,6 +115,14 @@
 				saveasstl();
 
 				loadGeometry();
+
+				var p = convert_vec3d(dukemap.map.playerStart);
+				p.y = p.y / 16;
+				camera.position.copy(p);
+				
+				let rotY =  duke_angle(dukemap.map.playerStart.ang);
+				rotY = (rotY + 90) * Math.PI / 180;
+				camera.rotationY = -rotY;
 
 				mapLoaded = true;
 			};
@@ -208,6 +236,7 @@
 				const surfsector = dukemap.map.sectors[item.sec];
 				const wall = item.wall;
 
+				let fognear = [], fogfar=[], palswap=[];
 				let verts = [];
 				let color = [];
 				var positions = [];
@@ -223,6 +252,21 @@
 					normals.push(p.x);
 					normals.push(p.y);
 					normals.push(p.z);
+
+					fognear.push(0);
+					fognear.push(0);
+					fognear.push(0);
+
+					if (surfsector.visibility == 0) {
+						fogfar.push(30000);
+						fogfar.push(30000);
+						fogfar.push(30000);
+					}
+					else {
+						fogfar.push(1000 * surfsector.visibility);
+						fogfar.push(1000 * surfsector.visibility);
+						fogfar.push(1000 * surfsector.visibility);
+					}
 				}
 
 				for (t=0;t<3;t++) {
@@ -334,8 +378,8 @@
 				groups[tex_file].normals.push(...normals);
 				groups[tex_file].uvs.push(...uvs);
 				groups[tex_file].color.push(...color);
-				//groups[tex_file].fognear.push(...fognear);
-				//groups[tex_file].fogfar.push(...fogfar);
+				groups[tex_file].fognear.push(...fognear);
+				groups[tex_file].fogfar.push(...fogfar);
 			}
 
 
@@ -350,8 +394,8 @@
 				geometry.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(groups[tex].normals), 3));
 				geometry.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(groups[tex].uvs), 2));
 				geometry.setAttribute('color', new THREE.BufferAttribute(new Float32Array(groups[tex].color), 3));
-				//geometry.setAttribute('afognear', new THREE.BufferAttribute(new Float32Array(groups[tex].fognear), 3));
-				//geometry.setAttribute('afogfar', new THREE.BufferAttribute(new Float32Array(groups[tex].fogfar), 3));
+				geometry.setAttribute('fognear', new THREE.BufferAttribute(new Float32Array(groups[tex].fognear), 3));
+				geometry.setAttribute('fogfar', new THREE.BufferAttribute(new Float32Array(groups[tex].fogfar), 3));
 
 				const color = 0xFFFFFF;
 
@@ -377,11 +421,9 @@
 					uniforms: {
 						tex:   { type: "t", value: test_texture },
 
-						/*
-						fogColor:    { type: "c", value: fog.color },
-						fogNear:     { type: "f", value: fog.near },
-						fogFar:      { type: "f", value: fog.far }
-						*/
+						//fogColor:    { type: "c", value: fog.color },
+						//fogNear:     { type: "f", value: fog.near },
+						//fogFar:      { type: "f", value: fog.far }
 					}
 				});
 				material.color = new THREE.Color(0xffffff);
@@ -393,25 +435,29 @@
 
 			for (i=0;i<dukemap.map.sprites.length;i++) {
 				const sprite = dukemap.map.sprites[i];
-				const tex = get_tile_name(sprite.picnum);
-				const test_texture = new THREE.TextureLoader().load('duke-tex/' + tex + '.png');
-				test_texture.magFilter = THREE.NearestFilter; // Magnify filter
-				test_texture.minFilter = THREE.NearestFilter; // Minimum filter
-				const material = new THREE.SpriteMaterial({ map: test_texture });
-				material.color = new THREE.Color(0xffffff);
+				if (sprite.picnum > 10) { // Special Sprites are 0-10 https://infosuite.duke4.net/index.php?page=basics_tags
+					const tex = get_tile_name(sprite.picnum);
+					const test_texture = new THREE.TextureLoader().load('duke-tex/' + tex + '.png');
+					test_texture.magFilter = THREE.NearestFilter; // Magnify filter
+					test_texture.minFilter = THREE.NearestFilter; // Minimum filter
+					const material = new THREE.SpriteMaterial({ map: test_texture });
+					material.color = new THREE.Color(0xffffff);
 
-				const sprite_sector = dukemap.map.sectors[sprite.sectnum];
+					const sprite_sector = dukemap.map.sectors[sprite.sectnum];
 
-				const obj = new THREE.Sprite(material);
-				var pos = convert_vec3d(sprite);
-				obj.position.copy(pos);
-				obj.position.y = sprite_sector.floorz + pos.y;
-				obj.scale.set( sprite.clipdist * 16, sprite.clipdist * 16, sprite.clipdist * 16 );
-				scene.add(obj);
+					const obj = new THREE.Sprite(material);
+					var pos = convert_vec3d(sprite);
+					obj.position.copy(pos);
+					obj.position.y = (pos.y) / 16; // map height is divided by 16 across the board
+					obj.scale.set(sprite.clipdist * 16, sprite.clipdist * 16, sprite.clipdist * 16);
+					scene.add(obj);
+				}
 			}
 
 		}
-
+		function duke_angle(ang) {
+			return ang / 2048 * 360;
+		}
 		function convert_vec3d(pt) {
 			var ret = new THREE.Vector3();
 			ret.x = pt.x;

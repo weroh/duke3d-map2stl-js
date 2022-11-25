@@ -11,7 +11,7 @@
 
 	<ul>
 		<?php
-		$files = scandir('.');
+		$files = scandir(__DIR__ . '/map/');
 		foreach ($files as $filename) {
 			$pi = pathinfo($filename);
 
@@ -169,7 +169,7 @@
 		}
 		function drawGrid(context) {
 			// Draw lines for new_sector
-			context.strokeStyle = "grey";
+			setColor("grey");
 			var t0 = transMouseCoords(0,0);
 			var t1 = transMouseCoords(canvas.width,canvas.height);
 
@@ -210,7 +210,7 @@
 
 			drawGrid(ctx);
 
-			ctx.strokeStyle = "#ffffff";
+			setColor("#ffffff");
 
 			var map = dukemap.map;
 
@@ -225,24 +225,32 @@
 			//map.sectors[60].color = '#ffffff';
 			//drawSector(map.sectors[60]);
 		}
-
+		function setColor(color) {
+			ctx.strokeStyle = color;
+		}
+		function drawWall(w1, w2) {
+			ctx.beginPath();
+			ctx.moveTo(transX(dukemap.map.walls[w1].x), transY(dukemap.map.walls[w1].y));
+			ctx.lineTo(transX(dukemap.map.walls[w2].x), transY(dukemap.map.walls[w2].y));
+			ctx.stroke();
+			ctx.closePath();
+		}
 		function drawSector(sectorNum) {
 			var sector = dukemap.map.sectors[sectorNum];
 
-			ctx.strokeStyle = sector.color;
+			setColor(sector.color);
 
 			var startpos = sector.wallptr;
 
 			// Move to first wall
-			ctx.beginPath();
 			for (var i=0;i<sector.wallnum;i++) {
 				var w = startpos + i;
 				var nextw = dukemap.map.walls[w].point2;
-				ctx.moveTo(transX(dukemap.map.walls[w].x), transY(dukemap.map.walls[w].y));
-				ctx.lineTo(transX(dukemap.map.walls[nextw].x), transY(dukemap.map.walls[nextw].y));
+				//ctx.moveTo(transX(dukemap.map.walls[w].x), transY(dukemap.map.walls[w].y));
+				//ctx.lineTo(transX(dukemap.map.walls[nextw].x), transY(dukemap.map.walls[nextw].y));
+
+				drawWall(w, nextw);
 			}
-			ctx.stroke();
-			ctx.closePath();
 		}
 
 		setZoom(CameraZoom);
@@ -252,7 +260,7 @@
 			var filename = $(this).attr("data-filename");
 
 			dukemap = Object.create(DukeMap);
-			dukemap.loadURL(filename);
+			dukemap.loadURL("map/" + filename);
 			dukemap.onLoad = function() {
 				CameraX = -dukemap.map.playerStart.x;
 				CameraY = -dukemap.map.playerStart.y;
