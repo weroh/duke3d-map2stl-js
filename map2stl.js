@@ -54,18 +54,18 @@ function remove_duplicates(arr) {
  */
 //typedef struct { float x[4], y[2]; long pwal[2]; } zoid_t;
 function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long n, zoid_t **retzoids, long *retnzoids)
-	//float f, x0, y0, x1, y1, sy0, sy1, cury, *sector_y = 0, *trapx0 = 0, *trapx1 = 0;
+	//float f, x0, y0, x1, y1, sy0, sy1, *sector_y = 0, *trapx0 = 0, *trapx1 = 0;
 	//long i, j, k, g, s, ntrap, zoidalloc, *pwal = 0;
 
-	var f, x0, y0, x1, y1, sy0, sy1, cury, sector_y = [], trapx0 = [], trapx1 = [];
-	var i, j, k, g, s, ntrap, pwal = [];
+	let sector_y = [], trapx0 = [], trapx1 = [];
+	let pwal = [];
 
 	zoids.length = 0; // Empty array
 	if (n < 3) return(0);
 
 	// malloc here because this is traversed backwards
 	sector_y.length = n;
-	for (i=0;i<n;i++) {
+	for (let i=0;i<n;i++) {
 		sector_y.push(0);
 		trapx0.push(0);
 		trapx1.push(0);
@@ -73,7 +73,7 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 	}
 
 	// Copy values from wall[i].y
-	for(i=n-1;i>=0;i--) sector_y[i] = wal[i].y;
+	for(let i=n-1;i>=0;i--) sector_y[i] = wal[i].y;
 
 	// Remove duplicates
 	sector_y = remove_duplicates(sector_y);
@@ -85,23 +85,24 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 		return 0;
 	});
 
-	for(s=0;s<sector_y.length-1;s++) {
-		sy0 = sector_y[s];
-		sy1 = sector_y[s+1];
-		ntrap = 0;
+	let j = 0;
+	for(let s=0;s<sector_y.length-1;s++) {
+		let sy0 = sector_y[s];
+		let sy1 = sector_y[s+1];
+		let ntrap = 0;
 		for(i=0;i<n;i++) {
 			// First wall
-			x0 = wal[i].x;
-			y0 = wal[i].y; 
+			let x0 = wal[i].x;
+			let y0 = wal[i].y; 
       
       j = wal[i].n+i; // next wall + i
 			
 			// Second wall
-			x1 = wal[j].x;
-			y1 = wal[j].y;
+			let x1 = wal[j].x;
+			let y1 = wal[j].y;
 			if (y0 > y1) {
 				// Swap x0,y0 with x1,y1
-				f = x0;
+				let f = x0;
 				x0 = x1;
 				x1 = f;
 
@@ -119,18 +120,18 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
       ntrap++;
 		}
 
-		for(g=(ntrap>>1);g;g>>=1) {
-			for(i=0;i<ntrap-g;i++) {
+		for(let g=(ntrap>>1);g;g>>=1) {
+			for(let i=0;i<ntrap-g;i++) {
 				for(j=i;j>=0;j-=g) {
 					if (trapx0[j]+trapx1[j] <= trapx0[j+g]+trapx1[j+g]) break;
-					f = trapx0[j]; trapx0[j] = trapx0[j+g]; trapx0[j+g] = f;
+					let f = trapx0[j]; trapx0[j] = trapx0[j+g]; trapx0[j+g] = f;
 					f = trapx1[j]; trapx1[j] = trapx1[j+g]; trapx1[j+g] = f;
-					k =   pwal[j];   pwal[j] =   pwal[j+g];   pwal[j+g] = k;
+					let k =   pwal[j];   pwal[j] =   pwal[j+g];   pwal[j+g] = k;
 				}
 			}
 		}
 
-		for(i=0;i<ntrap;i=j+1) {
+		for(let i=0;i<ntrap;i=j+1) {
 			j = i+1;
 			if ((trapx0[i+1] <= trapx0[i]) && (trapx1[i+1] <= trapx1[i])) continue;
 			while ((j+2 < ntrap) && (trapx0[j+1] <= trapx0[j]) && (trapx1[j+1] <= trapx1[j])) j += 2;
@@ -150,13 +151,11 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 }
 
 function getslopez(s, i, x, y) { // static float getslopez (sect_t *s, long i, float x, float y)
-	var wal = s.wall;
+	let wal = s.wall;
 	return((wal[0].x-x)*s.grad[i].x + (wal[0].y-y)*s.grad[i].y + s.z[i]);
 }
 
 function getwalls(s, w, ver, maxverts) { // static long getwalls (long s, long w, vertlist_t *ver, long maxverts)
-	var i, j, k;
-
 	let wal = sectorInfo[s].wall; 
 	let bs = wal[w].ns;
 
@@ -196,8 +195,8 @@ function getwalls(s, w, ver, maxverts) { // static long getwalls (long s, long w
 	//Sort next sects by order of height in middle of wall (crap sort)
 	let fx = (wal[w].x+wal[nw].x)*0.5;
 	let fy = (wal[w].y+wal[nw].y)*0.5;
-	for(k=1;k<vn;k++) {
-		for(j=0;j<k;j++) {
+	for(let k=1;k<vn;k++) {
+		for(let j=0;j<k;j++) {
 			if (getslopez(sectorInfo[ver[j].s],0,fx,fy) + getslopez(sectorInfo[ver[j].s],1,fx,fy) >
 				  getslopez(sectorInfo[ver[k].s],0,fx,fy) + getslopez(sectorInfo[ver[k].s],1,fx,fy)) {
 				let tver = ver[j];
@@ -216,10 +215,8 @@ function copy_kgln_t(k1, k2) {
 	k1.n = k2.n;
 }
 function wallclip(pol, npol) { // static long wallclip (kgln_t *pol, kgln_t *npol)
-	var f, dz0, dz1;
-
-	dz0 = pol[3].z-pol[0].z;
-  dz1 = pol[2].z-pol[1].z;
+	let dz0 = pol[3].z-pol[0].z;
+  let dz1 = pol[2].z-pol[1].z;
 	if (dz0 > 0.0) //do not include null case for rendering
 	{
 		//npol[0] = pol[0];
@@ -234,7 +231,7 @@ function wallclip(pol, npol) { // static long wallclip (kgln_t *pol, kgln_t *npo
 		}
 		else
 		{
-			f = dz0/(dz0-dz1);
+			let f = dz0/(dz0-dz1);
 			npol[1].x = (pol[1].x-pol[0].x)*f + pol[0].x;
 			npol[1].y = (pol[1].y-pol[0].y)*f + pol[0].y;
 			npol[1].z = (pol[1].z-pol[0].z)*f + pol[0].z;
@@ -247,7 +244,7 @@ function wallclip(pol, npol) { // static long wallclip (kgln_t *pol, kgln_t *npo
 		return(0);
 	}
 	else {
-		f = dz0/(dz0-dz1);
+		let f = dz0/(dz0-dz1);
 		npol[0].x = (pol[1].x-pol[0].x)*f + pol[0].x;
 		npol[0].y = (pol[1].y-pol[0].y)*f + pol[0].y;
 		npol[0].z = (pol[1].z-pol[0].z)*f + pol[0].z;
@@ -284,24 +281,24 @@ function saveasstl() {
 	const MAXVERTS = 256;
 
 	//#define MAXVERTS 256 //WARNING:not dynamic
-	var verts = [];
-	for (i=0;i<MAXVERTS;i++) {
+	let verts = [];
+	for (let i=0;i<MAXVERTS;i++) {
 		verts.push({w:0, s:0});
 	}
 
   // pol,npol= typedef struct { float x, y, z; int n; } kgln_t;
-	var pol = [new_kgln_t(), new_kgln_t(), new_kgln_t(), new_kgln_t()];
-  var npol = [new_kgln_t(), new_kgln_t(), new_kgln_t(), new_kgln_t()]; 
+	let pol = [new_kgln_t(), new_kgln_t(), new_kgln_t(), new_kgln_t()];
+  let npol = [new_kgln_t(), new_kgln_t(), new_kgln_t(), new_kgln_t()]; 
 
   // Output Geometry
-	var tri = [new_point3d(),new_point3d(),new_point3d()], normal = new_point3d();
-	var grad;
-	var wal;
-	var zoids = [];
-	var fil;
-	var f, fz;
-	var i=0, j=0, k=0, n=0, w=0, s=0, nw=0, vn=0, s0=0, cf0=0, s1=0, cf1=0, is_floor=0;
-	var numtris;
+	let tri = [new_point3d(),new_point3d(),new_point3d()], normal = new_point3d();
+	let grad;
+	let wal;
+	let zoids = [];
+	let fil;
+	let f, fz;
+	let i=0, j=0, k=0, n=0, w=0, s=0, nw=0, vn=0, s0=0, cf0=0, s1=0, cf1=0, is_floor=0;
+	let numtris = 0;
 
 	// This is our intermediate format before converting to obj or whatever
 	map2stl_output = [];
