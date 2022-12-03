@@ -85,7 +85,7 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 		let sy0 = sector_y[s];
 		let sy1 = sector_y[s+1];
 		let ntrap = 0;
-		for(i=0;i<n;i++) {
+		for(let i=0;i<n;i++) {
 			// First wall
 			let x0 = wal[i].x;
 			let y0 = wal[i].y; 
@@ -131,7 +131,7 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 			if ((trapx0[i+1] <= trapx0[i]) && (trapx1[i+1] <= trapx1[i])) continue;
 			while ((j+2 < ntrap) && (trapx0[j+1] <= trapx0[j]) && (trapx1[j+1] <= trapx1[j])) j += 2;
 
-			// NOTE: This could be optimized using zoids.push() instead of setting by index...
+			// Add to the zoids that we're returning
 			zoids.push({
 				x: [trapx0[i], trapx0[j], trapx1[j], trapx1[i]],
 				y: [sy0, sy1],
@@ -150,53 +150,47 @@ function getslopez(s, i, x, y) { // static float getslopez (sect_t *s, long i, f
 	return((wal[0].x-x)*s.grad[i].x + (wal[0].y-y)*s.grad[i].y + s.z[i]);
 }
 
-function getwalls(s, w, ver, maxverts) { // static long getwalls (long s, long w, vertlist_t *ver, long maxverts)
+function getwalls(s, w, verts, maxverts) { // static long getwalls (long s, long w, vertlist_t *ver, long maxverts)
 	let wal = sectorInfo[s].wall; 
-	let bs = wal[w].ns;
+	let nextSector = wal[w].ns;
 
-	/*
-	Note: The following doesn't translate well in JavaScript
-	if ((unsigned)bs >= (unsigned)numsects) return(0);
-
-	casting (unsigned)bs will cause a -1 value to be much greater than numsects causing us to return 0
-	It seems negative values require us to eject. And values greater than numsects cause us to return 0
-	So we check this as two separate conditions now
-	*/
-	if (bs >= dukemap.map.numsects) return(0);
-	if (bs <= -1) return(0);
+	// -1 means there are no neighboring sectors
+	if (nextSector <= -1) return(0);
 
 	var limit = 250; // This limit prevents the do while loop from running away. We shouldn't have 250 walls in one sector anyway...
 
+	// Now lets get a list of walls directly next to other sectors. This is important for carving out hallways or portals into another sector
 	let vn = 0; 
 	let nw = wal[w].n+w; 
 	let bw = wal[w].nw;
 	do {
-		let wal2 = sectorInfo[bs].wall; 
+		let wal2 = sectorInfo[nextSector].wall; 
 		let i = wal2[bw].n+bw; //Make sure it's an opposite wall
 		if ((wal[w].x == wal2[i].x) && (wal[nw].x == wal2[bw].x) &&
 			  (wal[w].y == wal2[i].y) && (wal[nw].y == wal2[bw].y)) {
 			if (vn < maxverts) {
-				ver[vn].s = bs;
-				ver[vn].w = bw;
+				verts[vn].s = nextSector;
+				verts[vn].w = bw;
 				vn++;
 			}
 		}
-		bs = wal2[bw].ns;
+		nextSector = wal2[bw].ns;
 		bw = wal2[bw].nw;
 
 		if (--limit <= 0) { break; }
-	} while (bs != s);
+	} while (nextSector != s);
 
 	//Sort next sects by order of height in middle of wall (crap sort)
 	let fx = (wal[w].x+wal[nw].x)*0.5;
 	let fy = (wal[w].y+wal[nw].y)*0.5;
 	for(let k=1;k<vn;k++) {
 		for(let j=0;j<k;j++) {
-			if (getslopez(sectorInfo[ver[j].s],0,fx,fy) + getslopez(sectorInfo[ver[j].s],1,fx,fy) >
-				  getslopez(sectorInfo[ver[k].s],0,fx,fy) + getslopez(sectorInfo[ver[k].s],1,fx,fy)) {
-				let tver = ver[j];
-				ver[j] = ver[k];
-				ver[k] = tver;
+			console.log(k,j);
+			if (getslopez(sectorInfo[verts[j].s],0,fx,fy) + getslopez(sectorInfo[verts[j].s],1,fx,fy) >
+				  getslopez(sectorInfo[verts[k].s],0,fx,fy) + getslopez(sectorInfo[verts[k].s],1,fx,fy)) {
+				let tver = verts[j];
+				verts[j] = verts[k];
+				verts[k] = tver;
 			}
 		}
 	}
@@ -212,42 +206,43 @@ function copy_kgln_t(k1, k2) {
 function wallclip(pol, npol) { // static long wallclip (kgln_t *pol, kgln_t *npol)
 	let dz0 = pol[3].z-pol[0].z;
   let dz1 = pol[2].z-pol[1].z;
-	if (dz0 > 0.0) //do not include null case for rendering
-	{
-		//npol[0] = pol[0];
-		copy_kgln_t(npol[0], pol[0]);
-		if (dz1 > 0.0) //do not include null case for rendering
-		{
+
+	if (dz0 > 0.0) { //do not include null case for rendering
+		if (dz1 > 0.0)  { //do not include null case for rendering
+			copy_kgln_t(npol[0], pol[0]); //npol[0] = pol[0];
 			copy_kgln_t(npol[1], pol[1]); //npol[1] = pol[1];
 			copy_kgln_t(npol[2], pol[2]); //npol[2] = pol[2];
 			copy_kgln_t(npol[3], pol[3]); //npol[3] = pol[3];
-			npol[0].n = npol[1].n = npol[2].n = 1; npol[3].n = -3;
+			npol[0].n = npol[1].n = npol[2].n = 1;
+			npol[3].n = -3;
 			return(4);
 		}
-		else
-		{
+		else {
 			let f = dz0/(dz0-dz1);
+			copy_kgln_t(npol[0], pol[0]); //npol[0] = pol[0];
 			npol[1].x = (pol[1].x-pol[0].x)*f + pol[0].x;
 			npol[1].y = (pol[1].y-pol[0].y)*f + pol[0].y;
 			npol[1].z = (pol[1].z-pol[0].z)*f + pol[0].z;
 			copy_kgln_t(npol[2], pol[3]); //npol[2] = pol[3];
-			npol[0].n = npol[1].n = 1; npol[2].n = -2;
+			npol[0].n = npol[1].n = 1;
+			npol[2].n = -2;
 			return(3);
 		}
 	}
-	if (dz1 <= 0.0) { //do not include null case for rendering
-		return(0);
-	}
-	else {
+	if (dz1 > 0.0) { //do not include null case for rendering
 		let f = dz0/(dz0-dz1);
 		npol[0].x = (pol[1].x-pol[0].x)*f + pol[0].x;
 		npol[0].y = (pol[1].y-pol[0].y)*f + pol[0].y;
 		npol[0].z = (pol[1].z-pol[0].z)*f + pol[0].z;
 		copy_kgln_t(npol[1], pol[1]); //npol[1] = pol[1];
 		copy_kgln_t(npol[2], pol[2]); //npol[2] = pol[2];
-		npol[0].n = npol[1].n = 1; npol[2].n = -2;
+		npol[0].n = npol[1].n = 1;
+		npol[2].n = -2;
 		return(3);
 	}
+
+	// Clip
+	return (0);
 }
 
 function normal_from_tri(tri) { // tri = array[3] of {x,y,z}
@@ -293,15 +288,17 @@ function saveasstl() {
 	// This is our intermediate format before converting to obj or whatever
 	map2stl_output = [];
 
+	// Two for loops nested in this for loop. One for creating ceilings/floors. The second for creating walls.
 	for(let s=0; s<dukemap.map.numsects; s++) {
 
-		let wal = sectorInfo[s].wall;
+		let wall = sectorInfo[s].wall;
 		let n = sectorInfo[s].wallcount;
 
 		// NOTE: This is done slightly differently than in map2stl.c
 		// We return nzoids here because it's easy. We're also not expecting memory to fail. So we aren't even checking for that anymore.
 		// Also in this version sect2trap only gets called once for both the floor and the ceiling
-		let nzoids = sect2trap(wal,n,zoids);
+		let nzoids = sect2trap(wall,n,zoids);
+		console.log(nzoids);
 
 		//draw sector filled - Ceilings and Floors first
 		//is_floor=0; // CEILING
@@ -317,7 +314,7 @@ function saveasstl() {
 					pol[n].y = zoids[i].y[j>>1];
 
 					if ((!n) || (pol[n].x != pol[n-1].x) || (pol[n].y != pol[n-1].y)) {
-						pol[n].z = (wal[0].x-pol[n].x)*grad.x + (wal[0].y-pol[n].y)*grad.y + fz;
+						pol[n].z = (wall[0].x-pol[n].x)*grad.x + (wall[0].y-pol[n].y)*grad.y + fz;
 						pol[n].n = 1; n++;
 					}
 				}
@@ -329,15 +326,15 @@ function saveasstl() {
 				tri[0].z = pol[0].z;
 
 				for(let j=2;j<n;j++) {
-					let k = j-is_floor;   
-          tri[1].x = pol[k].x;
-          tri[1].y = pol[k].y;
-          tri[1].z = pol[k].z;
+					let k1 = j-is_floor;
+          tri[1].x = pol[k1].x;
+          tri[1].y = pol[k1].y;
+          tri[1].z = pol[k1].z;
 
-					k = j-1+is_floor;
-          tri[2].x = pol[k].x;
-          tri[2].y = pol[k].y;
-          tri[2].z = pol[k].z;
+					let k2 = (j-1)+is_floor;
+          tri[2].x = pol[k2].x;
+          tri[2].y = pol[k2].y;
+          tri[2].z = pol[k2].z;
 
           normal = normal_from_tri(tri);
 
@@ -347,23 +344,25 @@ function saveasstl() {
 						tri: [
 							tri[2], tri[1], tri[0]
 						],
-						sec: s
+						sector: s,
+						originalIndex: s // original index in the .MAP file
 					});
 				}
 			}
 		}
 
 		// Draw Walls
-		//wal = sectorInfo[s].wall; 
+		//wall = sectorInfo[s].wall; 
 		let wn = sectorInfo[s].wallcount; // wn=numer of walls
 		for(let w=0; w<wn; w++) {
-			let nw = wal[w].n+w;
+			let nw = wall[w].n+w;
 			let vn = getwalls(s,w,verts,MAXVERTS);
 
-			pol[0].x = wal[ w].x; pol[0].y = wal[ w].y; pol[0].n = 1;
-			pol[1].x = wal[nw].x; pol[1].y = wal[nw].y; pol[1].n = 1;
-			pol[2].x = wal[nw].x; pol[2].y = wal[nw].y; pol[2].n = 1;
-			pol[3].x = wal[ w].x; pol[3].y = wal[ w].y; pol[3].n =-3;
+
+			pol[0].x = wall[ w].x; pol[0].y = wall[ w].y; pol[0].n = 1;
+			pol[1].x = wall[nw].x; pol[1].y = wall[nw].y; pol[1].n = 1;
+			pol[2].x = wall[nw].x; pol[2].y = wall[nw].y; pol[2].n = 1;
+			pol[3].x = wall[ w].x; pol[3].y = wall[ w].y; pol[3].n =-3;
 
 			for(let k=0;k<=vn;k++) { //Warning: do not reverse for loop!
 				let s0 = 0;
@@ -390,13 +389,30 @@ function saveasstl() {
           normal = normal_from_tri(tri);
 
 					write_map2stl_output({
+						j: j,
+						npol: npol,
 						type: "wall",
 						normal: normal,
 						tri: [
-							tri[2], tri[1], tri[0]
+							{
+								x: npol[j  ].x,
+								y: npol[j  ].y,
+								z: npol[j  ].z
+							},
+							{
+								x: npol[j-1].x,
+								y: npol[j-1].y,
+								z: npol[j-1].z,
+							},
+							{
+								x: npol[0].x,
+								y: npol[0].y,
+								z: npol[0].z,
+							}
 						],
-						sec: s,
-						wal: wal[w]
+						wall: wall[w],
+						sector: s,
+						originalIndex: wall[w].orig.wallIndex // Original index in the .MAP file
 					});
 				}
 			}
@@ -416,9 +432,15 @@ function write_map2stl_output(params) {
 		tri: [
 			new THREE.Vector3(), new THREE.Vector3(), new THREE.Vector3()
 		],
-		sec: params.sec,
-		wal: params.wal
+		wall: params.wall,
+		originalIndex: params.originalIndex,
+
+		j: params.j,
+		npol: params.npol
 	};
+	if (typeof params.sector !== "undefined") {
+		result.sector = params.sector;
+	}
 	result.normal.copy(params.normal);
 	result.tri[0].copy(params.tri[0]);
 	result.tri[1].copy(params.tri[1]);
@@ -460,15 +482,16 @@ function loadmap() {
 		}
 	}
 
-	let k = 0;
+	let wallIndex = 0;
 	for(let i=0;i<dukemap.map.numsects;i++) {
-		for(let j=0;j<sectorInfo[i].wallcount;j++,k++) {
+		for(let j=0;j<sectorInfo[i].wallcount;j++,wallIndex++) {
 			let startpos = dukemap.map.sectors[i].wallptr;
-			let b7wal = dukemap.map.walls[k];
+			let b7wal = dukemap.map.walls[wallIndex];
+			b7wal.wallIndex = wallIndex;
 			sectorInfo[i].wall.push({
 				x: b7wal.x,
 				y: b7wal.y,
-				n: b7wal.point2-k,
+				n: b7wal.point2-wallIndex,
 
 				// Added orig so we can extract wall textures and other attributes later...
 				orig: b7wal
@@ -508,6 +531,10 @@ function checknextwalls() {
 			//console.log(s1, nextWall,sectorInfo[s1].wall[nextWall]);
 			let x1 = sectorInfo[s1].wall[nextWall].x;
 			let y1 = sectorInfo[s1].wall[nextWall].y;
+
+
+			// This next step checks for walls that are right next to each other.
+			// This data is already saved in the map, but for some reason we're scanning through this anyway
 
 			$goto = false; // Little hack to simulate goto
 			for(let s0=0;s0<s1;s0++) {

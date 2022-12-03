@@ -9,7 +9,7 @@
 
 	<script src="dukemap.js"></script>
 
-	<ul>
+	<ul id="map-list">
 		<?php
 		$files = scandir(__DIR__ . '/map/');
 		foreach ($files as $filename) {
@@ -23,7 +23,7 @@
 	</ul>
 
 	<p id="coord" style="color:#fff;font-family:'courier new'"></p>
-	<canvas id="myCanvas" width="1200" height="800"></canvas>
+	<canvas id="myCanvas" width="1200" height="800" style="width:100%"></canvas>
 
 
 	<script>
@@ -262,6 +262,7 @@
 			dukemap = Object.create(DukeMap);
 			dukemap.loadURL("map/" + filename);
 			dukemap.onLoad = function() {
+				$("#map-list").hide();
 				CameraX = -dukemap.map.playerStart.x;
 				CameraY = -dukemap.map.playerStart.y;
 

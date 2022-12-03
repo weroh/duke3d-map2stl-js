@@ -4,7 +4,7 @@
 	<meta charset="utf-8">
 	<title></title>
 </head>
-<body style="background: #ddd;color:#fff">
+<body style="background: #000;color:#fff">
 	<script src="jquery.min.js"></script>
 
 	<ul id="map-list">
@@ -19,7 +19,7 @@
 		}
 		?>
 	</ul>
-	<p style="color:#000;">WASD to move. [Space] = go up. [C] = go down. Use arrow keys to look. [Esc] returns mouse. [Alt] + [Enter] = Full screen. Reload to try new map.</p>
+	<p style="color:#fff;">WASD to move. [Space] = go up. [C] = go down. Use arrow keys to look. [Esc] returns mouse. [Alt] + [Enter] = Full screen. Reload to try new map.</p>
 	<script src="dukemap.js"></script>
 	<script src="map2stl.js"></script>
 
@@ -96,6 +96,7 @@
 		var cube;
 		var controls;
 		var mapLoaded = false;
+		var wireframe = false;
 
 
 		init();
@@ -184,12 +185,18 @@
 				'KeyS': false,
 				'KeyD': false,
 			};
+			controls.keyLastStates = {
+				'KeyW': false,
+				'KeyA': false,
+				'KeyS': false,
+				'KeyD': false,
+			};
 			controls.mouseStates = {
 				left: false,
 				middle: false,
 				right: false,
 				scroll: 0,
-			}
+			};
 			camera.rotationX = 0;
 			camera.rotationY = 0;
 		}
@@ -233,7 +240,8 @@
 			//console.log(map2stl_output);
 			for (i=0;i<map2stl_output.length;i++) {
 				const item = map2stl_output[i];
-				const surfsector = dukemap.map.sectors[item.sec];
+				//console.log(item);
+				const surfsector = dukemap.map.sectors[item.sector];
 				const wall = item.wall;
 
 				let fognear = [], fogfar=[], palswap=[];
@@ -282,43 +290,56 @@
 				var uv_scale_y = 512;
 				var uv_offset_x = 0;
 				var uv_offset_y = 0;
+				let rgb = 0;
+				let pal = 0;
 				if (item.type == "wall") {
-					picnum = item.wal.orig.picnum;
-					if (item.wal.orig.overpicnum != 0) {
-						picnum = item.wal.orig.overpicnum;
-						//console.log(item.wal.orig.overpicnum);
+					picnum = item.wall.orig.picnum;
+					pal = item.wall.orig.pal;
+					/*
+					if (item.wall.orig.overpicnum != 0) {
+						picnum = item.wall.orig.overpicnum;
+						//console.log(item.wall.orig.overpicnum);
 						//console.log(get_tile_name(picnum));
 					}
-					var rgb = shade_to_float(item.wal.orig.shade);
-					for (t=0;t<3;t++) {
-						color.push(rgb);
-						color.push(rgb);
-						color.push(rgb);
-					}
+					*/
+					rgb = shade_to_float(item.wall.orig.shade);
 				}
 				else if (item.type == "floor") {
+					pal = surfsector.floorpal;
 					picnum = surfsector.floorpicnum;
-					var rgb = shade_to_float(surfsector.floorshade);
-					for (t=0;t<3;t++) {
-						color.push(rgb);
-						color.push(rgb);
-						color.push(rgb);
-					}
+					rgb = shade_to_float(surfsector.floorshade);
 				}
 				else if (item.type == "ceil") {
+					pal = surfsector.ceilingpal;
 					picnum = surfsector.ceilingpicnum;
-					var rgb = shade_to_float(surfsector.ceilingshade);
-					for (t=0;t<3;t++) {
-						color.push(rgb);
-						color.push(rgb);
-						color.push(rgb);
-					}
+					rgb = shade_to_float(surfsector.ceilingshade);
 				}
 				else {
-					for (t=0;t<3;t++) {
-						color.push(1);
-						color.push(1);
-						color.push(1);
+					rgb = 1;
+				}
+				for (t=0;t<3;t++) {
+					switch (pal) {
+						case 1:
+							color.push(0);
+							color.push(0);
+							color.push(rgb);
+						break;
+						case 2:
+							color.push(rgb);
+							color.push(0);
+							color.push(0);
+						break;
+						case 8:
+							color.push(0);
+							color.push(rgb);
+							color.push(0);
+						break;
+
+						default:
+							color.push(rgb);
+							color.push(rgb);
+							color.push(rgb);
+
 					}
 				}
 
@@ -449,6 +470,9 @@
 					var pos = convert_vec3d(sprite);
 					obj.position.copy(pos);
 					obj.position.y = (pos.y) / 16; // map height is divided by 16 across the board
+
+					// Move up halfway
+					obj.position.y += sprite.clipdist * 8;
 					obj.scale.set(sprite.clipdist * 16, sprite.clipdist * 16, sprite.clipdist * 16);
 					scene.add(obj);
 				}
@@ -514,6 +538,21 @@
 			return resultTemp;
 		}
 
+
+		// Check if a key was pressed once and then unpressed once
+		function keyPressed(key) {
+			if (typeof controls.keyStates[key] !== "undefined") {
+				if (controls.keyStates[key] && !controls.keyLastStates[key]) {
+					controls.keyLastStates[key] = controls.keyStates[key];
+					return true;
+				}
+				else {
+					controls.keyLastStates[key] = controls.keyStates[key];
+				}
+			}
+
+			return false;
+		}
 		function animate()
 		{
 			var moveForward = 0;
@@ -564,6 +603,19 @@
 			}
 			if (controls.keyStates['KeyC']) { // Go Down
 				camera.position.y -= 100;
+			}
+			if (keyPressed('KeyX')) { // Wirefame Toggle
+				wireframe = !wireframe;
+				for (let i=0;i<scene.children.length;i++) {
+					if (scene.children[i].material) {
+						if (wireframe) {
+							scene.children[i].material.wireframe = true;
+						}
+						else {
+							scene.children[i].material.wireframe = false;
+						}
+					}
+				}
 			}
 			var lookDirection = getMoveVector(moveForward, moveSide);
 			camera.position.x += lookDirection.x * 50;
