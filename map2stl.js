@@ -6,11 +6,11 @@ let b7wal;
 let map2stl_output;
 
 function new_point3d() { // typedef struct { float x, y, z; } point3d;
-  return { x:0, y:0, z:0 };
+	return { x:0, y:0, z:0 };
 }
 
 function new_point2d() { // typedef struct { float x, y; } point2d;
-  return { x:0, y:0 };
+	return { x:0, y:0 };
 }
 
 function new_wall_t() { // typedef struct { float x, y; long n, ns, nw; } wall_t;
@@ -29,7 +29,7 @@ function new_sect_t() { // typedef struct { float z[2]; point2d grad[2]; wall_t 
 }
 
 function new_kgln_t() { // typedef struct { float x, y, z; int n; } kgln_t;
-	return { x: 0, y: 0, z: 0, n: 0 };
+	return { x: 0, y: 0, z: 0 };
 }
 
 function new_zoid_t() { //typedef struct { float x[4], y[2]; long pwal[2]; } zoid_t;
@@ -48,8 +48,9 @@ function remove_duplicates(arr) {
 
 /*
  * sect2trap()
- * Not 100% sure what this does, but I believe it is converting sectors to trapezoids based on the name.
- * It seems to be mainly used for filling roof + ceiling
+ * Slices sectors into trapezoids which can then be split into triangles. 
+ * Ken Silverman wrote the original C code just for exporting triangles.
+ * This is not how Build does it, but it is one way to extract geometry.
  */
 function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long n, zoid_t **retzoids, long *retnzoids)
 	let sector_y = [], trapx0 = [], trapx1 = [];
@@ -89,8 +90,8 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 			// First wall
 			let x0 = wal[i].x;
 			let y0 = wal[i].y; 
-      
-      j = wal[i].n+i; // next wall + i
+			
+			j = wal[i].n+i; // next wall + i
 			
 			// Second wall
 			let x1 = wal[j].x;
@@ -109,10 +110,10 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 			if (y0 < sy0) x0 = (sy0-wal[i].y)*(wal[j].x-wal[i].x)/(wal[j].y-wal[i].y) + wal[i].x;
 			if (y1 > sy1) x1 = (sy1-wal[i].y)*(wal[j].x-wal[i].x)/(wal[j].y-wal[i].y) + wal[i].x;
 			
-      trapx0[ntrap] = x0;
-      trapx1[ntrap] = x1;
-      pwal[ntrap] = wal[i];
-      ntrap++;
+			trapx0[ntrap] = x0;
+			trapx1[ntrap] = x1;
+			pwal[ntrap] = wal[i];
+			ntrap++;
 		}
 
 		for(let g=(ntrap>>1);g;g>>=1) {
@@ -167,7 +168,7 @@ function getwalls(s, w, verts, maxverts) { // static long getwalls (long s, long
 		let wal2 = sectorInfo[nextSector].wall; 
 		let i = wal2[bw].n+bw; //Make sure it's an opposite wall
 		if ((wal[w].x == wal2[i].x) && (wal[nw].x == wal2[bw].x) &&
-			  (wal[w].y == wal2[i].y) && (wal[nw].y == wal2[bw].y)) {
+			(wal[w].y == wal2[i].y) && (wal[nw].y == wal2[bw].y)) {
 			if (vn < maxverts) {
 				verts[vn].s = nextSector;
 				verts[vn].w = bw;
@@ -185,9 +186,8 @@ function getwalls(s, w, verts, maxverts) { // static long getwalls (long s, long
 	let fy = (wal[w].y+wal[nw].y)*0.5;
 	for(let k=1;k<vn;k++) {
 		for(let j=0;j<k;j++) {
-			console.log(k,j);
 			if (getslopez(sectorInfo[verts[j].s],0,fx,fy) + getslopez(sectorInfo[verts[j].s],1,fx,fy) >
-				  getslopez(sectorInfo[verts[k].s],0,fx,fy) + getslopez(sectorInfo[verts[k].s],1,fx,fy)) {
+				getslopez(sectorInfo[verts[k].s],0,fx,fy) + getslopez(sectorInfo[verts[k].s],1,fx,fy)) {
 				let tver = verts[j];
 				verts[j] = verts[k];
 				verts[k] = tver;
@@ -197,60 +197,60 @@ function getwalls(s, w, verts, maxverts) { // static long getwalls (long s, long
 	return(vn);
 }
 
-function copy_kgln_t(k1, k2) {
+function copy_vec3(k1, k2) {
 	k1.x = k2.x;
 	k1.y = k2.y;
 	k1.z = k2.z;
-	k1.n = k2.n;
 }
+// Gets point where two slopes intersect. Also maybe should be called lerp_vec3()
+function intersect_vec3(ret, v1, v0, lerp) { // lerp = value in between 0 and 1
+	ret.x = (v1.x-v0.x)*lerp + v0.x;
+	ret.y = (v1.y-v0.y)*lerp + v0.y;
+	ret.z = (v1.z-v0.z)*lerp + v0.z;
+}
+
+// Looks like this clips along the Z axis in order to creates walls. Removed .n values since they don't do anything.
 function wallclip(pol, npol) { // static long wallclip (kgln_t *pol, kgln_t *npol)
-	let dz0 = pol[3].z-pol[0].z;
-  let dz1 = pol[2].z-pol[1].z;
+
+	// Height difference is used to determine where the wall clips.
+	// No difference, no wall. Negative difference, no wall (because it's in the world).
+	let dz0 = pol[3].z-pol[0].z; // This wall
+	let dz1 = pol[2].z-pol[1].z; // Next wall
 
 	if (dz0 > 0.0) { //do not include null case for rendering
 		if (dz1 > 0.0)  { //do not include null case for rendering
-			copy_kgln_t(npol[0], pol[0]); //npol[0] = pol[0];
-			copy_kgln_t(npol[1], pol[1]); //npol[1] = pol[1];
-			copy_kgln_t(npol[2], pol[2]); //npol[2] = pol[2];
-			copy_kgln_t(npol[3], pol[3]); //npol[3] = pol[3];
-			npol[0].n = npol[1].n = npol[2].n = 1;
-			npol[3].n = -3;
+			copy_vec3(npol[0], pol[0]); //npol[0] = pol[0];
+			copy_vec3(npol[1], pol[1]); //npol[1] = pol[1];
+			copy_vec3(npol[2], pol[2]); //npol[2] = pol[2];
+			copy_vec3(npol[3], pol[3]); //npol[3] = pol[3];
 			return(4);
 		}
 		else {
-			let f = dz0/(dz0-dz1);
-			copy_kgln_t(npol[0], pol[0]); //npol[0] = pol[0];
-			npol[1].x = (pol[1].x-pol[0].x)*f + pol[0].x;
-			npol[1].y = (pol[1].y-pol[0].y)*f + pol[0].y;
-			npol[1].z = (pol[1].z-pol[0].z)*f + pol[0].z;
-			copy_kgln_t(npol[2], pol[3]); //npol[2] = pol[3];
-			npol[0].n = npol[1].n = 1;
-			npol[2].n = -2;
+			let lerp = dz0/(dz0-dz1);
+			copy_vec3(npol[0], pol[0]); //npol[0] = pol[0];
+			intersect_vec3(npol[1], pol[1], pol[0], lerp);
+			copy_vec3(npol[2], pol[3]); //npol[2] = pol[3];
 			return(3);
 		}
 	}
-	if (dz1 > 0.0) { //do not include null case for rendering
-		let f = dz0/(dz0-dz1);
-		npol[0].x = (pol[1].x-pol[0].x)*f + pol[0].x;
-		npol[0].y = (pol[1].y-pol[0].y)*f + pol[0].y;
-		npol[0].z = (pol[1].z-pol[0].z)*f + pol[0].z;
-		copy_kgln_t(npol[1], pol[1]); //npol[1] = pol[1];
-		copy_kgln_t(npol[2], pol[2]); //npol[2] = pol[2];
-		npol[0].n = npol[1].n = 1;
-		npol[2].n = -2;
+	else if (dz1 > 0.0) { //do not include null case for rendering
+		let lerp = dz0/(dz0-dz1);
+		intersect_vec3(npol[0], pol[1], pol[0], lerp);
+		copy_vec3(npol[1], pol[1]); //npol[1] = pol[1];
+		copy_vec3(npol[2], pol[2]); //npol[2] = pol[2];
 		return(3);
 	}
 
-	// Clip
+	// Clip. Do not include
 	return (0);
 }
 
 function normal_from_tri(tri) { // tri = array[3] of {x,y,z}
 	var result = {x:0, y:0, z:0};
 
-  result.x = (tri[1].y-tri[0].y)*(tri[2].z-tri[0].z) - (tri[1].z-tri[0].z)*(tri[2].y-tri[0].y);
-  result.y = (tri[1].z-tri[0].z)*(tri[2].x-tri[0].x) - (tri[1].x-tri[0].x)*(tri[2].z-tri[0].z);
-  result.z = (tri[1].x-tri[0].x)*(tri[2].y-tri[0].y) - (tri[1].y-tri[0].y)*(tri[2].x-tri[0].x);
+	result.x = (tri[1].y-tri[0].y)*(tri[2].z-tri[0].z) - (tri[1].z-tri[0].z)*(tri[2].y-tri[0].y);
+	result.y = (tri[1].z-tri[0].z)*(tri[2].x-tri[0].x) - (tri[1].x-tri[0].x)*(tri[2].z-tri[0].z);
+	result.z = (tri[1].x-tri[0].x)*(tri[2].y-tri[0].y) - (tri[1].y-tri[0].y)*(tri[2].x-tri[0].x);
 
 	let f = result.x*result.x + result.y*result.y + result.z*result.z;
 	if (f > 0) f = -1/Math.sqrt(f);
@@ -276,12 +276,29 @@ function saveasstl() {
 		verts.push({w:0, s:0});
 	}
 
-  // pol,npol= typedef struct { float x, y, z; int n; } kgln_t;
-	let pol = [new_kgln_t(), new_kgln_t(), new_kgln_t(), new_kgln_t()];
-  let npol = [new_kgln_t(), new_kgln_t(), new_kgln_t(), new_kgln_t()]; 
+	// pol,npol= typedef struct { float x, y, z; int n; } kgln_t;
+	let pol = [
+		{x:0, y:0, z:0},
+		{x:0, y:0, z:0},
+		{x:0, y:0, z:0},
+		{x:0, y:0, z:0}
+	];
 
-  // Output Geometry
-	let tri = [new_point3d(),new_point3d(),new_point3d()], normal = new_point3d();
+	let npol = [
+		{x:0, y:0, z:0},
+		{x:0, y:0, z:0},
+		{x:0, y:0, z:0},
+		{x:0, y:0, z:0}
+	];
+
+	// Output Geometry
+	let tri = [
+		{x:0, y:0, z:0},
+		{x:0, y:0, z:0},
+		{x:0, y:0, z:0}
+	];
+
+	let normal = {x:0, y:0, z:0};
 	let zoids = [];
 	let f;
 
@@ -292,13 +309,13 @@ function saveasstl() {
 	for(let s=0; s<dukemap.map.numsects; s++) {
 
 		let wall = sectorInfo[s].wall;
+		let firstWall = wall[0]; // Slopes are aligned to wall[0]
 		let n = sectorInfo[s].wallcount;
 
 		// NOTE: This is done slightly differently than in map2stl.c
 		// We return nzoids here because it's easy. We're also not expecting memory to fail. So we aren't even checking for that anymore.
 		// Also in this version sect2trap only gets called once for both the floor and the ceiling
 		let nzoids = sect2trap(wall,n,zoids);
-		console.log(nzoids);
 
 		//draw sector filled - Ceilings and Floors first
 		//is_floor=0; // CEILING
@@ -308,35 +325,34 @@ function saveasstl() {
 			let grad = sectorInfo[s].grad[is_floor];
 
 			for(let i=0; i<nzoids; i++) {
-        n=0;
+				let polInd=0;
 				for(let j=0; j<4; j++) {
-					pol[n].x = zoids[i].x[j];
-					pol[n].y = zoids[i].y[j>>1];
+					pol[polInd].x = zoids[i].x[j];
+					pol[polInd].y = zoids[i].y[j>>1];
 
-					if ((!n) || (pol[n].x != pol[n-1].x) || (pol[n].y != pol[n-1].y)) {
-						pol[n].z = (wall[0].x-pol[n].x)*grad.x + (wall[0].y-pol[n].y)*grad.y + fz;
-						pol[n].n = 1; n++;
+					if ((polInd == 0) || (pol[polInd].x != pol[polInd-1].x) || (pol[polInd].y != pol[polInd-1].y)) {
+						pol[polInd].z = (firstWall.x-pol[polInd].x)*grad.x + (firstWall.y-pol[polInd].y)*grad.y + fz;
+						polInd++;
 					}
 				}
-				if (n < 3) continue;
-				pol[n-1].n = 1-n;
+				if (polInd < 3) continue;
 
 				tri[0].x = pol[0].x;
 				tri[0].y = pol[0].y;
 				tri[0].z = pol[0].z;
 
-				for(let j=2;j<n;j++) {
+				for(let j=2;j<polInd;j++) {
 					let k1 = j-is_floor;
-          tri[1].x = pol[k1].x;
-          tri[1].y = pol[k1].y;
-          tri[1].z = pol[k1].z;
+					tri[1].x = pol[k1].x;
+					tri[1].y = pol[k1].y;
+					tri[1].z = pol[k1].z;
 
 					let k2 = (j-1)+is_floor;
-          tri[2].x = pol[k2].x;
-          tri[2].y = pol[k2].y;
-          tri[2].z = pol[k2].z;
+					tri[2].x = pol[k2].x;
+					tri[2].y = pol[k2].y;
+					tri[2].z = pol[k2].z;
 
-          normal = normal_from_tri(tri);
+					normal = normal_from_tri(tri);
 
 					write_map2stl_output({
 						type: (is_floor == 1) ? "floor" : "ceil",
@@ -351,6 +367,191 @@ function saveasstl() {
 			}
 		}
 
+		/*
+		let wn = sectorInfo[s].wallcount; // wn=numer of walls
+		for(let w=0; w<wn; w++) {
+			let cur_wall = wall[w];
+			let next_wall = wall[w+cur_wall.n];
+			let sector = sectorInfo[s];
+
+			if (typeof cur_wall.skip !== "undefined") continue;
+
+			if (cur_wall.nw == -1) { // -1 = no next wall
+				let tri1 = [
+					{
+						x: cur_wall.x,
+						y: cur_wall.y,
+						z: getslopez(sector,0,cur_wall.x,cur_wall.y)//sector.z[0]
+					},
+					{
+						x: cur_wall.x,
+						y: cur_wall.y,
+						z: getslopez(sector,1,cur_wall.x,cur_wall.y)//sector.z[1]
+					},
+					{
+						x: next_wall.x,
+						y: next_wall.y,
+						z: getslopez(sector,0,next_wall.x,next_wall.y)//sector.z[0]
+					}
+				];
+				let tri2 = [
+					{
+						x: cur_wall.x,
+						y: cur_wall.y,
+						z: getslopez(sector,1,cur_wall.x,cur_wall.y)//sector.z[1]
+					},
+					{
+						x: next_wall.x,
+						y: next_wall.y,
+						z: getslopez(sector,1,next_wall.x,next_wall.y)//sector.z[1]
+					},
+					{
+						x: next_wall.x,
+						y: next_wall.y,
+						z: getslopez(sector,0,next_wall.x,next_wall.y)//sector.z[0]
+					}
+				];
+				let normal = normal_from_tri(tri1);
+				write_map2stl_output({
+					type: "wall",
+					normal: normal,
+					tri: tri1,
+					wall: wall[w],
+					sector: s,
+					originalIndex: wall[w].orig.wallIndex // Original index in the .MAP file
+				});
+				write_map2stl_output({
+					type: "wall",
+					normal: normal,
+					tri: tri2,
+					wall: wall[w],
+					sector: s,
+					originalIndex: wall[w].orig.wallIndex // Original index in the .MAP file
+				});
+			}
+			else {
+				// Find the neighboring sector/wall
+				let nbr_sector = sectorInfo[cur_wall.ns];
+				let nbr_wall = nbr_sector.wall[cur_wall.nw];
+
+				nbr_sector.wall[cur_wall.nw].skip = true;
+				if (nbr_sector.z[0] != sector.z[0]) { // ceiling height different
+
+					let cw_z = getslopez(sector,0,cur_wall.x,cur_wall.y);
+					let nw_z = getslopez(sector,0,next_wall.x,next_wall.y);
+
+					let tri1 = [
+						{
+							x: cur_wall.x,
+							y: cur_wall.y,
+							z: getslopez(sector,0,cur_wall.x,cur_wall.y)//sector.z[0]
+						},
+						{
+							x: cur_wall.x,
+							y: cur_wall.y,
+							z: getslopez(nbr_sector,0,cur_wall.x,cur_wall.y)//nbr_sector.z[0]
+						},
+						{
+							x: next_wall.x,
+							y: next_wall.y,
+							z: getslopez(sector,0,next_wall.x,next_wall.y)//sector.z[0]
+						}
+					];
+					let tri2 = [
+						{
+							x: cur_wall.x,
+							y: cur_wall.y,
+							z: getslopez(nbr_sector,0,cur_wall.x,cur_wall.y)//nbr_sector.z[0]
+						},
+						{
+							x: next_wall.x,
+							y: next_wall.y,
+							z: getslopez(nbr_sector,0,next_wall.x,next_wall.y)//nbr_sector.z[0]
+						},
+						{
+							x: next_wall.x,
+							y: next_wall.y,
+							z: getslopez(sector,0,next_wall.x,next_wall.y)//sector.z[0]
+						}
+					];
+					let normal = normal_from_tri(tri1);
+					write_map2stl_output({
+						type: "wall",
+						normal: normal,
+						tri: tri1,
+						wall: nbr_wall,
+						sector: s,
+						originalIndex: wall[w].orig.wallIndex // Original index in the .MAP file
+					});
+					write_map2stl_output({
+						type: "wall",
+						normal: normal,
+						tri: tri2,
+						wall: nbr_wall,
+						sector: s,
+						originalIndex: wall[w].orig.wallIndex // Original index in the .MAP file
+					});
+				}
+
+
+				if (nbr_sector.z[1] != sector.z[1]) { // floor height different
+
+					let tri1 = [
+						{
+							x: cur_wall.x,
+							y: cur_wall.y,
+							z: getslopez(nbr_sector,1,cur_wall.x,cur_wall.y)//nbr_sector.z[1]
+						},
+						{
+							x: cur_wall.x,
+							y: cur_wall.y,
+							z: getslopez(sector,1,cur_wall.x,cur_wall.y)//sector.z[1]
+						},
+						{
+							x: next_wall.x,
+							y: next_wall.y,
+							z: getslopez(nbr_sector,1,next_wall.x,next_wall.y)//nbr_sector.z[1]
+						}
+					];
+					let tri2 = [
+						{
+							x: cur_wall.x,
+							y: cur_wall.y,
+							z: getslopez(sector,1,cur_wall.x,cur_wall.y)//sector.z[1]
+						},
+						{
+							x: next_wall.x,
+							y: next_wall.y,
+							z: getslopez(sector,1,next_wall.x,next_wall.y)//sector.z[1]
+						},
+						{
+							x: next_wall.x,
+							y: next_wall.y,
+							z: getslopez(nbr_sector,1,next_wall.x,next_wall.y)//nbr_sector.z[1]
+						}
+					];
+					let normal = normal_from_tri(tri1);
+					write_map2stl_output({
+						type: "wall",
+						normal: normal,
+						tri: tri1,
+						wall: wall[w],
+						sector: s,
+						originalIndex: wall[w].orig.wallIndex // Original index in the .MAP file
+					});
+					write_map2stl_output({
+						type: "wall",
+						normal: normal,
+						tri: tri2,
+						wall: wall[w],
+						sector: s,
+						originalIndex: wall[w].orig.wallIndex // Original index in the .MAP file
+					});
+				}
+			}
+		}
+		*/
+
 		// Draw Walls
 		//wall = sectorInfo[s].wall; 
 		let wn = sectorInfo[s].wallcount; // wn=numer of walls
@@ -359,34 +560,39 @@ function saveasstl() {
 			let vn = getwalls(s,w,verts,MAXVERTS);
 
 
-			pol[0].x = wall[ w].x; pol[0].y = wall[ w].y; pol[0].n = 1;
-			pol[1].x = wall[nw].x; pol[1].y = wall[nw].y; pol[1].n = 1;
-			pol[2].x = wall[nw].x; pol[2].y = wall[nw].y; pol[2].n = 1;
-			pol[3].x = wall[ w].x; pol[3].y = wall[ w].y; pol[3].n =-3;
+			pol[0].x = wall[ w].x; pol[0].y = wall[ w].y;
+			pol[1].x = wall[nw].x; pol[1].y = wall[nw].y;
+			pol[2].x = wall[nw].x; pol[2].y = wall[nw].y;
+			pol[3].x = wall[ w].x; pol[3].y = wall[ w].y;
 
 			for(let k=0;k<=vn;k++) { //Warning: do not reverse for loop!
-				let s0 = 0;
-				let s1 = 0;
-				let cf0 = 0;
-				let cf1 = 0;
+				let s0;
+				let s1;
+				let cf0;
+				let cf1;
 				if (k >  0) { s0 = verts[k-1].s; cf0 = 1; } else { s0 = s; cf0 = 0; }
 				if (k < vn) { s1 = verts[k  ].s; cf1 = 0; } else { s1 = s; cf1 = 1; }
 
+				// Z positions (aka height) will determine where the wall clips
 				pol[0].z = getslopez(sectorInfo[s0],cf0,pol[0].x,pol[0].y);
 				pol[1].z = getslopez(sectorInfo[s0],cf0,pol[1].x,pol[1].y);
 				pol[2].z = getslopez(sectorInfo[s1],cf1,pol[2].x,pol[2].y);
 				pol[3].z = getslopez(sectorInfo[s1],cf1,pol[3].x,pol[3].y);
-				i = wallclip(pol, npol); if (!i) continue;
 
+				// Now clip based on Z
+				let numTri = wallclip(pol, npol);
+				if (numTri == 0) continue;
+
+				// Finalized triangles come from npol starting with #0
 				tri[0].x = npol[0].x;
 				tri[0].y = npol[0].y;
 				tri[0].z = npol[0].z;
 
-				for(let j=2;j<i;j++) {
-					tri[1].x = npol[j-1].x; tri[1].y = npol[j-1].y; tri[1].z = npol[j-1].z;
-					tri[2].x = npol[j  ].x; tri[2].y = npol[j  ].y; tri[2].z = npol[j  ].z;
+				for(let j=1;j<numTri-1;j++) {
+					tri[1].x = npol[j].x; tri[1].y = npol[j].y; tri[1].z = npol[j].z;
+					tri[2].x = npol[j+1].x; tri[2].y = npol[j+1].y; tri[2].z = npol[j+1].z;
 					
-          normal = normal_from_tri(tri);
+					normal = normal_from_tri(tri);
 
 					write_map2stl_output({
 						j: j,
@@ -395,14 +601,14 @@ function saveasstl() {
 						normal: normal,
 						tri: [
 							{
-								x: npol[j  ].x,
-								y: npol[j  ].y,
-								z: npol[j  ].z
+								x: npol[j+1].x,
+								y: npol[j+1].y,
+								z: npol[j+1].z
 							},
 							{
-								x: npol[j-1].x,
-								y: npol[j-1].y,
-								z: npol[j-1].z,
+								x: npol[j].x,
+								y: npol[j].y,
+								z: npol[j].z,
 							},
 							{
 								x: npol[0].x,
@@ -470,15 +676,16 @@ function loadmap() {
 		sectorInfo[i].sectorIndex = i;
 		sectorInfo[i].wallcount = b7sec.wallnum;
 
+		// Floor Z position
 		sectorInfo[i].z[0] = (b7sec.ceilingz / 16);
 		sectorInfo[i].z[1] = (b7sec.floorz / 16);
 
 		//Enable slopes flag
 		if (b7sec.ceilingstat&2) { //Enable slopes flag
-			sectorInfo[i].grad[0].y = b7sec.ceilingheinum*(1/4096);
+			sectorInfo[i].grad[0].y = b7sec.ceilingheinum*(1/4096); // 4096 = 45 degrees. 0 = flat
 		}
 		if (b7sec.floorstat&2) { //Enable slopes flag
-			sectorInfo[i].grad[1].y = b7sec.floorheinum*(1/4096);
+			sectorInfo[i].grad[1].y = b7sec.floorheinum*(1/4096); // 4096 = 45 degrees. 0 = flat
 		}
 	}
 
@@ -504,7 +711,7 @@ function loadmap() {
 		if (f > 0) f = 1/Math.sqrt(f); fx *= f;
 		fy *= f;
 		for(let j=0;j<2;j++) {
-			sectorInfo[i].grad[j].x = fx*sectorInfo[i].grad[j].y;
+			sectorInfo[i].grad[j].x = fx*sectorInfo[i].grad[j].y; // notice how this is .y? This is correct and also in map2stl.c.
 			sectorInfo[i].grad[j].y = fy*sectorInfo[i].grad[j].y;
 		}
 	}

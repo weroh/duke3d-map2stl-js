@@ -329,6 +329,11 @@
 							color.push(0);
 							color.push(0);
 						break;
+						case 7:
+							color.push(rgb);
+							color.push(rgb);
+							color.push(0);
+						break;
 						case 8:
 							color.push(0);
 							color.push(rgb);
