@@ -123,61 +123,22 @@ function getslopez(sector, floorOrCeil, x, y) { // static float getslopez (sect_
 	return((wal[0].x-x)*sector.grad[floorOrCeil].x + (wal[0].y-y)*sector.grad[floorOrCeil].y + sector.z[floorOrCeil]);
 }
 
-function getwalls(sectorNum, wallInd, verts, maxverts) { // static long getwalls (long s, long w, vertlist_t *ver, long maxverts)
-	let wal = sectorInfo[sectorNum].wall; 
-	let nextSector = wal[wallInd].neighborSector;
+/*
+function getPortalWalls(sectorNum, wallInd) { // static long getwalls (long s, long w, vertlist_t *ver, long maxverts)
+	let sectorWalls = sectorInfo[sectorNum].wall; 
+	let nextSector = sectorWalls[wallInd].neighborSector;
+	let verts = [];
 
 	// -1 means there are no neighboring sectors
-	if (nextSector <= -1) return(0);
-
-	var limit = 250; // This limit prevents the do while loop from running away. We shouldn't have 250 walls in one sector anyway...
-
-	// Now lets get a list of walls directly next to other sectors. This is important for carving out hallways or portals into another sector
-	let numVerts = 0; 
-	let nextWall = wal[wallInd].n+wallInd; 
-	let neighborWall = wal[wallInd].neighborWall;
-	do {
-		let wal2 = sectorInfo[nextSector].wall; 
-		let i = wal2[neighborWall].n+neighborWall; //Make sure it's an opposite wall
-		if ((wal[wallInd].x == wal2[i].x) && (wal[nextWall].x == wal2[neighborWall].x) &&
-			(wal[wallInd].y == wal2[i].y) && (wal[nextWall].y == wal2[neighborWall].y)) {
-
-			verts.push({
-				s: nextSector,
-				w: neighborWall
-			});
-			numVerts++;
-		}
-		nextSector = wal2[neighborWall].neighborSector;
-		neighborWall = wal2[neighborWall].neighborWall;
-
-		if (--limit <= 0) { break; }
-	} while (nextSector != sectorNum);
-
-	/*
-	//Sort next sects by order of height in middle of wall (crap sort)
-	let fx = (wal[wallInd].x+wal[nextWall].x)*0.5;
-	let fy = (wal[wallInd].y+wal[nextWall].y)*0.5;
-	for(let k=1;k<numVerts;k++) {
-		for(let j=0;j<k;j++) {
-			if (getslopez(sectorInfo[verts[j].s],0,fx,fy) + getslopez(sectorInfo[verts[j].s],1,fx,fy) >
-				getslopez(sectorInfo[verts[k].s],0,fx,fy) + getslopez(sectorInfo[verts[k].s],1,fx,fy)) {
-				swap_vals(verts[j], verts[k]);
-			}
-		}
+	if (nextSector != -1) {
+		verts.push({
+			s: sectorWalls[wallInd].neighborSector,
+			w: sectorWalls[wallInd].neighborWall
+		});
 	}
-	*/
-	/*
-	// Using javascript sort
-	verts.sort((a, b) => {
-		let z1 = getslopez(sectorInfo[a.s],0,fx,fy) + getslopez(sectorInfo[a.s],1,fx,fy);
-		let z2 = getslopez(sectorInfo[b.s],0,fx,fy) + getslopez(sectorInfo[b.s],1,fx,fy);
-
-		return z1 > z2;
-	});
-	*/
-	return(numVerts);
+	return verts;
 }
+*/
 
 function swap_vals(v1, v2) {
 	let tv = v1;
@@ -185,20 +146,26 @@ function swap_vals(v1, v2) {
 	v2 = tv;
 }
 
-function copy_vec3(k1, k2) {
-	k1.x = k2.x;
-	k1.y = k2.y;
-	k1.z = k2.z;
+function copy_vec3(vec3) {
+	return {
+		x: vec3.x,
+		y: vec3.y,
+		z: vec3.z
+	};
 }
 // Gets point where two slopes intersect. Also maybe should be called lerp_vec3()
-function intersect_vec3(ret, v1, v0, lerp) { // lerp = value in between 0 and 1
-	ret.x = (v1.x-v0.x)*lerp + v0.x;
-	ret.y = (v1.y-v0.y)*lerp + v0.y;
-	ret.z = (v1.z-v0.z)*lerp + v0.z;
+function intersect_vec3(v1, v0, lerp) { // lerp = value in between 0 and 1
+	return {
+		x: (v1.x-v0.x)*lerp + v0.x,
+		y: (v1.y-v0.y)*lerp + v0.y,
+		z: (v1.z-v0.z)*lerp + v0.z
+	};
 }
 
 // Looks like this clips along the Z axis in order to creates walls. Removed .n values since they don't do anything.
-function wallclip(pol, npol) { // static long wallclip (kgln_t *pol, kgln_t *npol)
+function wallclip(pol) { // static long wallclip (kgln_t *pol, kgln_t *npol)
+
+	let npol = [];
 
 	// Height difference is used to determine where the wall clips.
 	// No difference, no wall. Negative difference, no wall (because it's in the world).
@@ -207,30 +174,30 @@ function wallclip(pol, npol) { // static long wallclip (kgln_t *pol, kgln_t *npo
 
 	if (dz0 > 0.0) { //do not include null case for rendering
 		if (dz1 > 0.0)  { //do not include null case for rendering
-			copy_vec3(npol[0], pol[0]); //npol[0] = pol[0];
-			copy_vec3(npol[1], pol[1]); //npol[1] = pol[1];
-			copy_vec3(npol[2], pol[2]); //npol[2] = pol[2];
-			copy_vec3(npol[3], pol[3]); //npol[3] = pol[3];
-			return(4);
+			npol.push(copy_vec3(pol[0])); //npol[0] = pol[0];
+			npol.push(copy_vec3(pol[1])); //npol[1] = pol[1];
+			npol.push(copy_vec3(pol[2])); //npol[2] = pol[2];
+			npol.push(copy_vec3(pol[3])); //npol[3] = pol[3];
+			return npol;
 		}
 		else {
 			let lerp = dz0/(dz0-dz1);
-			copy_vec3(npol[0], pol[0]); //npol[0] = pol[0];
-			intersect_vec3(npol[1], pol[1], pol[0], lerp);
-			copy_vec3(npol[2], pol[3]); //npol[2] = pol[3];
-			return(3);
+			npol.push(copy_vec3(pol[0])); //npol[0] = pol[0];
+			npol.push(intersect_vec3(pol[1], pol[0], lerp));
+			npol.push(copy_vec3(pol[3])); //npol[2] = pol[3];
+			return npol;
 		}
 	}
 	else if (dz1 > 0.0) { //do not include null case for rendering
 		let lerp = dz0/(dz0-dz1);
-		intersect_vec3(npol[0], pol[1], pol[0], lerp);
-		copy_vec3(npol[1], pol[1]); //npol[1] = pol[1];
-		copy_vec3(npol[2], pol[2]); //npol[2] = pol[2];
-		return(3);
+		npol.push(intersect_vec3(pol[1], pol[0], lerp));
+		npol.push(copy_vec3(pol[1])); //npol[1] = pol[1];
+		npol.push(copy_vec3(pol[2])); //npol[2] = pol[2];
+		return npol;
 	}
 
 	// Clip. Do not include
-	return (0);
+	return npol;
 }
 
 function normal_from_tri(tri) { // tri = array[3] of {x,y,z}
@@ -262,13 +229,6 @@ function saveasstl() {
 
 	// pol,npol= typedef struct { float x, y, z; int n; } kgln_t;
 	let pol = [
-		{x:0, y:0, z:0},
-		{x:0, y:0, z:0},
-		{x:0, y:0, z:0},
-		{x:0, y:0, z:0}
-	];
-
-	let npol = [
 		{x:0, y:0, z:0},
 		{x:0, y:0, z:0},
 		{x:0, y:0, z:0},
@@ -541,23 +501,55 @@ function saveasstl() {
 		// Draw Walls
 		for(let w=0; w<sectorInfo[s].wallcount; w++) {
 			let nextWall = wall[w].n+w;
-			let verts = [];
 
-			//if (dukemap.map.sectors[s].ceilingstat_.parallaxing == true && dukemap.map.sectors[s].floorstat_.parallaxing == true) continue;
-			let vn = getwalls(s,w,verts,MAXVERTS);
+			//let verts = getPortalWalls(s,w);
+			let vn = 0;
 
 			pol[0].x = wall[ w].x; pol[0].y = wall[ w].y;
 			pol[1].x = wall[nextWall].x; pol[1].y = wall[nextWall].y;
 			pol[2].x = wall[nextWall].x; pol[2].y = wall[nextWall].y;
 			pol[3].x = wall[ w].x; pol[3].y = wall[ w].y;
 
+			if (wall[w].neighborSector != -1) {
+				vn = 1;
+			}
+
 			for(let k=0;k<=vn;k++) { //Warning: do not reverse for loop!
 				let s0;
 				let s1;
 				let cf0;
 				let cf1;
-				if (k >  0) { s0 = verts[k-1].s; cf0 = 1; } else { s0 = s; cf0 = 0; }
-				if (k < vn) { s1 = verts[k  ].s; cf1 = 0; } else { s1 = s; cf1 = 1; }
+
+				if (wall[w].neighborSector != -1) { // Has neighbor wall
+					if (k == 0) {
+						s0 = s; // Cur Sector
+						s1 = wall[w].neighborSector; // Next sector
+						cf0 = 0; // Ceiling
+						cf1 = 0; // Ceiling
+
+						// Check for skybox...
+						let tsec = dukemap.map.sectors[s];
+						let nsec = dukemap.map.sectors[wall[w].neighborSector];
+						if (tsec.ceilingstat_.parallaxing && nsec.ceilingstat_.parallaxing) continue;
+					}
+					else {
+						s0 = wall[w].neighborSector; // Next sector
+						s1 = s; // Cur Sector
+						cf0 = 1; // Floor
+						cf1 = 1; // Floor
+
+						// Check for skybox...
+						let tsec = dukemap.map.sectors[s];
+						let nsec = dukemap.map.sectors[wall[w].neighborSector];
+						if (tsec.floorstat_.parallaxing && nsec.floorstat_.parallaxing) continue;
+					}
+				}
+				else { // Build wall from top to bottom
+					s0 = s; // Cur Sector
+					s1 = s; // Cur Sector
+					cf0 = 0; // Ceiling
+					cf1 = 1; // Floor
+				}
 
 				// Z positions (aka height) will determine where the wall clips
 				pol[0].z = getslopez(sectorInfo[s0],cf0,pol[0].x,pol[0].y);
@@ -566,15 +558,15 @@ function saveasstl() {
 				pol[3].z = getslopez(sectorInfo[s1],cf1,pol[3].x,pol[3].y);
 
 				// Now clip based on Z
-				let numTri = wallclip(pol, npol);
-				if (numTri == 0) continue;
+				let npol = wallclip(pol);
+				if (npol.length == 0) continue;
 
 				// Finalized triangles come from npol starting with #0
-				copy_vec3(tri[0], npol[0]);
+				tri[0] = copy_vec3(npol[0]);
 
-				for(let j=1;j<numTri-1;j++) {
-					copy_vec3(tri[1], npol[j]);
-					copy_vec3(tri[2], npol[j+1]);
+				for(let j=1;j<npol.length-1;j++) {
+					tri[1] = copy_vec3(npol[j]);
+					tri[2] = copy_vec3(npol[j+1]);
 					
 					normal = normal_from_tri(tri);
 
@@ -662,7 +654,6 @@ function loadmap() {
 		sectorInfo[i].wallcount = b7sec.wallnum;
 
 		if (b7sec.lotag == 2) { // Water
-			console.log(b7sec);
 			sectorInfo[i].isWater = true;
 		}
 		else {
