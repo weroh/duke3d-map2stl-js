@@ -1,42 +1,17 @@
 "use strict";
 
 let sectorInfo=[];//static sect_t *sec;
-let b7sec;
-let b7wal;
 let map2stl_output;
-
-function new_point3d() { // typedef struct { float x, y, z; } point3d;
-	return { x:0, y:0, z:0 };
-}
-
-function new_point2d() { // typedef struct { float x, y; } point2d;
-	return { x:0, y:0 };
-}
-
-function new_wall_t() { // typedef struct { float x, y; long n, ns, nw; } wall_t;
-	return {
-		x: 0, y: 0, n: 0, ns: 0, nw: 0
-	};
-}
 
 function new_sect_t() { // typedef struct { float z[2]; point2d grad[2]; wall_t *wall; long n; } sect_t;
 	return { 
 		z: [0, 0], 
-		grad: [new_point2d(), new_point2d()],
+		grad: [
+			{x:0, y:0, slope: 0},
+			{x:0, y:0, slope: 0}
+		],
 		wall: [],
 		wallcount:0
-	};
-}
-
-function new_kgln_t() { // typedef struct { float x, y, z; int n; } kgln_t;
-	return { x: 0, y: 0, z: 0 };
-}
-
-function new_zoid_t() { //typedef struct { float x[4], y[2]; long pwal[2]; } zoid_t;
-	return {
-		x: [0, 0, 0, 0],
-		y: [0, 0],
-		pwal: [{}, {}] // Pointer in C++, but object here in JavaScript
 	};
 }
 
@@ -52,16 +27,16 @@ function remove_duplicates(arr) {
  * Ken Silverman wrote the original C code just for exporting triangles.
  * This is not how Build does it, but it is one way to extract geometry.
  */
-function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long n, zoid_t **retzoids, long *retnzoids)
+function sect2trap(wal) { // static long sect2trap (wall_t *wal, long n, zoid_t **retzoids, long *retnzoids)
 	let sector_y = [], trapx0 = [], trapx1 = [];
 	let pwal = [];
 
-	zoids.length = 0; // Empty array
-	if (n < 3) return(0);
+	let zoids = []; // Empty array
+	if (wal.length < 3) return(0);
 
 	// malloc here because this is traversed backwards
-	sector_y.length = n;
-	for (let i=0;i<n;i++) {
+	//sector_y.length = wal.length;
+	for (let i=0;i<wal.length;i++) {
 		sector_y.push(0);
 		trapx0.push(0);
 		trapx1.push(0);
@@ -69,7 +44,7 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 	}
 
 	// Copy values from wall[i].y
-	for(let i=n-1;i>=0;i--) sector_y[i] = wal[i].y;
+	for(let i=wal.length-1;i>=0;i--) sector_y[i] = wal[i].y;
 
 	// Remove duplicates
 	sector_y = remove_duplicates(sector_y);
@@ -86,7 +61,7 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 		let sy0 = sector_y[s];
 		let sy1 = sector_y[s+1];
 		let ntrap = 0;
-		for(let i=0;i<n;i++) {
+		for(let i=0;i<wal.length;i++) {
 			// First wall
 			let x0 = wal[i].x;
 			let y0 = wal[i].y; 
@@ -135,25 +110,22 @@ function sect2trap(wal, n, zoids) { // static long sect2trap (wall_t *wal, long 
 			// Add to the zoids that we're returning
 			zoids.push({
 				x: [trapx0[i], trapx0[j], trapx1[j], trapx1[i]],
-				y: [sy0, sy1],
-				pwal: [pwal[i], pwal[j]]
+				y: [sy0, sy1]
 			});
 		}
 	}
 
-	// NOTE: This used to return true/false. False if we ran out of memory. 20 years later, that shouldn't happen anymore.
-	// It's important to return the true total because zoids isn't truncated. Maybe in a future optimization we'll truncate zoids[].
-	return zoids.length;
+	return zoids;
 }
 
-function getslopez(s, i, x, y) { // static float getslopez (sect_t *s, long i, float x, float y)
-	let wal = s.wall;
-	return((wal[0].x-x)*s.grad[i].x + (wal[0].y-y)*s.grad[i].y + s.z[i]);
+function getslopez(sector, floorOrCeil, x, y) { // static float getslopez (sect_t *s, long i, float x, float y)
+	let wal = sector.wall;
+	return((wal[0].x-x)*sector.grad[floorOrCeil].x + (wal[0].y-y)*sector.grad[floorOrCeil].y + sector.z[floorOrCeil]);
 }
 
-function getwalls(s, w, verts, maxverts) { // static long getwalls (long s, long w, vertlist_t *ver, long maxverts)
-	let wal = sectorInfo[s].wall; 
-	let nextSector = wal[w].ns;
+function getwalls(sectorNum, wallInd, verts, maxverts) { // static long getwalls (long s, long w, vertlist_t *ver, long maxverts)
+	let wal = sectorInfo[sectorNum].wall; 
+	let nextSector = wal[wallInd].neighborSector;
 
 	// -1 means there are no neighboring sectors
 	if (nextSector <= -1) return(0);
@@ -161,40 +133,56 @@ function getwalls(s, w, verts, maxverts) { // static long getwalls (long s, long
 	var limit = 250; // This limit prevents the do while loop from running away. We shouldn't have 250 walls in one sector anyway...
 
 	// Now lets get a list of walls directly next to other sectors. This is important for carving out hallways or portals into another sector
-	let vn = 0; 
-	let nw = wal[w].n+w; 
-	let bw = wal[w].nw;
+	let numVerts = 0; 
+	let nextWall = wal[wallInd].n+wallInd; 
+	let neighborWall = wal[wallInd].neighborWall;
 	do {
 		let wal2 = sectorInfo[nextSector].wall; 
-		let i = wal2[bw].n+bw; //Make sure it's an opposite wall
-		if ((wal[w].x == wal2[i].x) && (wal[nw].x == wal2[bw].x) &&
-			(wal[w].y == wal2[i].y) && (wal[nw].y == wal2[bw].y)) {
-			if (vn < maxverts) {
-				verts[vn].s = nextSector;
-				verts[vn].w = bw;
-				vn++;
-			}
+		let i = wal2[neighborWall].n+neighborWall; //Make sure it's an opposite wall
+		if ((wal[wallInd].x == wal2[i].x) && (wal[nextWall].x == wal2[neighborWall].x) &&
+			(wal[wallInd].y == wal2[i].y) && (wal[nextWall].y == wal2[neighborWall].y)) {
+
+			verts.push({
+				s: nextSector,
+				w: neighborWall
+			});
+			numVerts++;
 		}
-		nextSector = wal2[bw].ns;
-		bw = wal2[bw].nw;
+		nextSector = wal2[neighborWall].neighborSector;
+		neighborWall = wal2[neighborWall].neighborWall;
 
 		if (--limit <= 0) { break; }
-	} while (nextSector != s);
+	} while (nextSector != sectorNum);
 
+	/*
 	//Sort next sects by order of height in middle of wall (crap sort)
-	let fx = (wal[w].x+wal[nw].x)*0.5;
-	let fy = (wal[w].y+wal[nw].y)*0.5;
-	for(let k=1;k<vn;k++) {
+	let fx = (wal[wallInd].x+wal[nextWall].x)*0.5;
+	let fy = (wal[wallInd].y+wal[nextWall].y)*0.5;
+	for(let k=1;k<numVerts;k++) {
 		for(let j=0;j<k;j++) {
 			if (getslopez(sectorInfo[verts[j].s],0,fx,fy) + getslopez(sectorInfo[verts[j].s],1,fx,fy) >
 				getslopez(sectorInfo[verts[k].s],0,fx,fy) + getslopez(sectorInfo[verts[k].s],1,fx,fy)) {
-				let tver = verts[j];
-				verts[j] = verts[k];
-				verts[k] = tver;
+				swap_vals(verts[j], verts[k]);
 			}
 		}
 	}
-	return(vn);
+	*/
+	/*
+	// Using javascript sort
+	verts.sort((a, b) => {
+		let z1 = getslopez(sectorInfo[a.s],0,fx,fy) + getslopez(sectorInfo[a.s],1,fx,fy);
+		let z2 = getslopez(sectorInfo[b.s],0,fx,fy) + getslopez(sectorInfo[b.s],1,fx,fy);
+
+		return z1 > z2;
+	});
+	*/
+	return(numVerts);
+}
+
+function swap_vals(v1, v2) {
+	let tv = v1;
+	v1 = v2;
+	v2 = tv;
 }
 
 function copy_vec3(k1, k2) {
@@ -271,10 +259,6 @@ function saveasstl() {
 	const MAXVERTS = 256;
 
 	//#define MAXVERTS 256 //WARNING:not dynamic
-	let verts = [];
-	for (let i=0;i<MAXVERTS;i++) {
-		verts.push({w:0, s:0});
-	}
 
 	// pol,npol= typedef struct { float x, y, z; int n; } kgln_t;
 	let pol = [
@@ -299,7 +283,6 @@ function saveasstl() {
 	];
 
 	let normal = {x:0, y:0, z:0};
-	let zoids = [];
 	let f;
 
 	// This is our intermediate format before converting to obj or whatever
@@ -315,7 +298,7 @@ function saveasstl() {
 		// NOTE: This is done slightly differently than in map2stl.c
 		// We return nzoids here because it's easy. We're also not expecting memory to fail. So we aren't even checking for that anymore.
 		// Also in this version sect2trap only gets called once for both the floor and the ceiling
-		let nzoids = sect2trap(wall,n,zoids);
+		let zoids = sect2trap(wall);
 
 		//draw sector filled - Ceilings and Floors first
 		//is_floor=0; // CEILING
@@ -324,7 +307,7 @@ function saveasstl() {
 			let fz = sectorInfo[s].z[is_floor];
 			let grad = sectorInfo[s].grad[is_floor];
 
-			for(let i=0; i<nzoids; i++) {
+			for(let i=0; i<zoids.length; i++) {
 				let polInd=0;
 				for(let j=0; j<4; j++) {
 					pol[polInd].x = zoids[i].x[j];
@@ -431,7 +414,7 @@ function saveasstl() {
 			}
 			else {
 				// Find the neighboring sector/wall
-				let nbr_sector = sectorInfo[cur_wall.ns];
+				let nbr_sector = sectorInfo[cur_wall.neighborSector];
 				let nbr_wall = nbr_sector.wall[cur_wall.nw];
 
 				nbr_sector.wall[cur_wall.nw].skip = true;
@@ -556,13 +539,17 @@ function saveasstl() {
 		//wall = sectorInfo[s].wall; 
 		let wn = sectorInfo[s].wallcount; // wn=numer of walls
 		for(let w=0; w<wn; w++) {
-			let nw = wall[w].n+w;
+			let nextWall = wall[w].n+w;
+			let verts = [];
+			/*
+			for (let i=0;i<MAXVERTS;i++) {
+				verts.push({w:0, s:0});
+			}*/
 			let vn = getwalls(s,w,verts,MAXVERTS);
 
-
 			pol[0].x = wall[ w].x; pol[0].y = wall[ w].y;
-			pol[1].x = wall[nw].x; pol[1].y = wall[nw].y;
-			pol[2].x = wall[nw].x; pol[2].y = wall[nw].y;
+			pol[1].x = wall[nextWall].x; pol[1].y = wall[nextWall].y;
+			pol[2].x = wall[nextWall].x; pol[2].y = wall[nextWall].y;
 			pol[3].x = wall[ w].x; pol[3].y = wall[ w].y;
 
 			for(let k=0;k<=vn;k++) { //Warning: do not reverse for loop!
@@ -584,13 +571,11 @@ function saveasstl() {
 				if (numTri == 0) continue;
 
 				// Finalized triangles come from npol starting with #0
-				tri[0].x = npol[0].x;
-				tri[0].y = npol[0].y;
-				tri[0].z = npol[0].z;
+				copy_vec3(tri[0], npol[0]);
 
 				for(let j=1;j<numTri-1;j++) {
-					tri[1].x = npol[j].x; tri[1].y = npol[j].y; tri[1].z = npol[j].z;
-					tri[2].x = npol[j+1].x; tri[2].y = npol[j+1].y; tri[2].z = npol[j+1].z;
+					copy_vec3(tri[1], npol[j]);
+					copy_vec3(tri[2], npol[j+1]);
 					
 					normal = normal_from_tri(tri);
 
@@ -674,18 +659,27 @@ function loadmap() {
 		// Create new sectorInfo
 		sectorInfo.push(new_sect_t());
 		sectorInfo[i].sectorIndex = i;
+		sectorInfo[i].orig = b7sec;
 		sectorInfo[i].wallcount = b7sec.wallnum;
+
+		if (b7sec.lotag == 2) { // Water
+			console.log(b7sec);
+			sectorInfo[i].isWater = true;
+		}
+		else {
+			sectorInfo[i].isWater = false;
+		}
 
 		// Floor Z position
 		sectorInfo[i].z[0] = (b7sec.ceilingz / 16);
 		sectorInfo[i].z[1] = (b7sec.floorz / 16);
 
-		//Enable slopes flag
-		if (b7sec.ceilingstat&2) { //Enable slopes flag
-			sectorInfo[i].grad[0].y = b7sec.ceilingheinum*(1/4096); // 4096 = 45 degrees. 0 = flat
+		// Convert slopes from 8192 to 90 degrees. Max 32767
+		if (b7sec.ceilingstat&2) { //&2 = Enable slopes flag
+			sectorInfo[i].grad[0].slope = b7sec.ceilingheinum*(1/4096); // 4096 = 45 degrees. 0 = flat
 		}
-		if (b7sec.floorstat&2) { //Enable slopes flag
-			sectorInfo[i].grad[1].y = b7sec.floorheinum*(1/4096); // 4096 = 45 degrees. 0 = flat
+		if (b7sec.floorstat&2) { //&2 = Enable slopes flag
+			sectorInfo[i].grad[1].slope = b7sec.floorheinum*(1/4096); // 4096 = 45 degrees. 0 = flat
 		}
 	}
 
@@ -708,11 +702,17 @@ function loadmap() {
 		let fx = sectorInfo[i].wall[1].y-sectorInfo[i].wall[0].y;
 		let fy = sectorInfo[i].wall[0].x-sectorInfo[i].wall[1].x;
 		let f = fx*fx + fy*fy;
-		if (f > 0) f = 1/Math.sqrt(f); fx *= f;
+
+		if (f > 0) {
+			f = 1/Math.sqrt(f);
+		}
+
+		fx *= f;
 		fy *= f;
+		
 		for(let j=0;j<2;j++) {
-			sectorInfo[i].grad[j].x = fx*sectorInfo[i].grad[j].y; // notice how this is .y? This is correct and also in map2stl.c.
-			sectorInfo[i].grad[j].y = fy*sectorInfo[i].grad[j].y;
+			sectorInfo[i].grad[j].x = fx*sectorInfo[i].grad[j].slope;
+			sectorInfo[i].grad[j].y = fy*sectorInfo[i].grad[j].slope;
 		}
 	}
 	return true;
@@ -724,7 +724,7 @@ function checknextwalls() {
 	//Clear all nextsect/nextwalls
 	for(let s0=0;s0<dukemap.map.numsects;s0++) {
 		for(let w0=0;w0<sectorInfo[s0].wallcount;w0++)  {
-			sectorInfo[s0].wall[w0].ns = sectorInfo[s0].wall[w0].nw = -1;
+			sectorInfo[s0].wall[w0].neighborSector = sectorInfo[s0].wall[w0].neighborWall = -1;
 		}
 	}
 
@@ -751,10 +751,10 @@ function checknextwalls() {
 						let w0n = sectorInfo[s0].wall[w0].n+w0;
 
 						if ((sectorInfo[s0].wall[w0n].x == sectorInfo[s1].wall[w1].x) && (sectorInfo[s0].wall[w0n].y == sectorInfo[s1].wall[w1].y)) {
-							sectorInfo[s1].wall[w1].ns = s0;
-							sectorInfo[s1].wall[w1].nw = w0;
-							sectorInfo[s0].wall[w0].ns = s1;
-							sectorInfo[s0].wall[w0].nw = w1;
+							sectorInfo[s1].wall[w1].neighborSector = s0;
+							sectorInfo[s1].wall[w1].neighborWall = w0;
+							sectorInfo[s0].wall[w0].neighborSector = s1;
+							sectorInfo[s0].wall[w0].neighborWall = w1;
 							$goto = true;
 						}
 					}
