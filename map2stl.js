@@ -307,6 +307,10 @@ function saveasstl() {
 			let fz = sectorInfo[s].z[is_floor];
 			let grad = sectorInfo[s].grad[is_floor];
 
+			// parallaxing = skybox. SKIP
+			if (is_floor == 0 && dukemap.map.sectors[s].ceilingstat_.parallaxing == true) continue;
+			if (is_floor == 1 && dukemap.map.sectors[s].floorstat_.parallaxing == true) continue;
+
 			for(let i=0; i<zoids.length; i++) {
 				let polInd=0;
 				for(let j=0; j<4; j++) {
@@ -351,8 +355,7 @@ function saveasstl() {
 		}
 
 		/*
-		let wn = sectorInfo[s].wallcount; // wn=numer of walls
-		for(let w=0; w<wn; w++) {
+		for(let w=0; w<sectorInfo[s].wallcount; w++) {
 			let cur_wall = wall[w];
 			let next_wall = wall[w+cur_wall.n];
 			let sector = sectorInfo[s];
@@ -536,15 +539,11 @@ function saveasstl() {
 		*/
 
 		// Draw Walls
-		//wall = sectorInfo[s].wall; 
-		let wn = sectorInfo[s].wallcount; // wn=numer of walls
-		for(let w=0; w<wn; w++) {
+		for(let w=0; w<sectorInfo[s].wallcount; w++) {
 			let nextWall = wall[w].n+w;
 			let verts = [];
-			/*
-			for (let i=0;i<MAXVERTS;i++) {
-				verts.push({w:0, s:0});
-			}*/
+
+			//if (dukemap.map.sectors[s].ceilingstat_.parallaxing == true && dukemap.map.sectors[s].floorstat_.parallaxing == true) continue;
 			let vn = getwalls(s,w,verts,MAXVERTS);
 
 			pol[0].x = wall[ w].x; pol[0].y = wall[ w].y;

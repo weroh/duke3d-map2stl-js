@@ -1,0 +1,42 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<meta charset="utf-8">
+	<title>Tile View</title>
+</head>
+<body style="background:#000;color:#fff">
+
+	<script src="jquery.min.js"></script>
+
+	<input type="text" id="picnum" placeholder="picnum"><br />
+	<img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><br>
+	<img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><br>
+	<img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><br>
+	<img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><br>
+
+	<script>
+		function get_tile_name(picnum) {
+			var num1 = picnum & 0xFF;
+			var num2 = ((picnum >> 8) & 0xFF);
+
+			var tex_file = 'TILES' + ('000'+num2).slice(-3);
+			tex_file += "_" + num1;
+
+			return tex_file;
+		}
+
+		(function($) {
+			$("#picnum").on("input", function() {
+				let picnum = parseInt($(this).val());
+				let filename = get_tile_name(picnum);
+
+				$(".tile").attr("src", "duke-tex/" + filename + ".png");
+			});
+
+			let filename = get_tile_name(0);
+			$(".tile").attr("src", "duke-tex/" + filename + ".png");
+		})(jQuery);
+
+	</script>
+</body>
+</html>

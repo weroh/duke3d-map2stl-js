@@ -2,7 +2,7 @@
 <html>
 <head>
 	<meta charset="utf-8">
-	<title></title>
+	<title>Duke Map Viewer</title>
 </head>
 <body style="background: #000;color:#fff">
 	<script src="jquery.min.js"></script>
@@ -26,70 +26,69 @@
 	<script src="three/three.min.js"></script>
 
 	<script>
-		const fog = new THREE.Fog(0x000000, 0, 20000);
 
 		const vertexShader = `
-		//#define USE_FOG
-		varying vec2 vUv;
-		attribute vec3 color;
-		attribute float fognear;
-		attribute float fogfar;
-		varying vec3 vColor;
-		varying float vfognear;
-		varying float vfogfar;
+			//#define USE_FOG
+			varying vec2 vUv;
+			attribute vec3 color;
+			attribute float fognear;
+			attribute float fogfar;
+			varying vec3 vColor;
+			varying float vfognear;
+			varying float vfogfar;
 
-		//<fog_pars_vertex> modified
-		varying float vFogDepth;
+			//<fog_pars_vertex> modified
+			varying float vFogDepth;
 
-		void main(){
-			vUv = uv;
-			vColor = color;
+			void main(){
+				vUv = uv;
+				vColor = color;
 
-			vfognear = fognear;
-			vfogfar = fogfar;
+				vfognear = fognear;
+				vfogfar = fogfar;
 
-	        vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
-	        gl_Position = projectionMatrix * mvPosition;
-	        
-	        //fogDepth = - mvPosition.z;
+		        vec4 mvPosition = modelViewMatrix * vec4( position, 1.0 );
+		        gl_Position = projectionMatrix * mvPosition;
+		        
+		        //fogDepth = - mvPosition.z;
 
 
-			//#include <fog_vertex>
-			vFogDepth = - mvPosition.z;
-		}
+				//#include <fog_vertex>
+				vFogDepth = - mvPosition.z;
+			}
 		`;
 
 		const fragmentShader = `
-		//#define USE_FOG
-		varying vec2 vUv;
-		varying vec3 vColor;
-		uniform sampler2D tex;
+			//#define USE_FOG
+			varying vec2 vUv;
+			varying vec3 vColor;
+			uniform sampler2D tex;
 
-		// <fog_pars_fragment> modified
-		uniform vec3 fogColor;
-		varying float vFogDepth;
+			// <fog_pars_fragment> modified
+			uniform vec3 fogColor;
+			varying float vFogDepth;
 
-		// modified fog
-		varying float vfognear;
-		varying float vfogfar;
+			// modified fog
+			varying float vfognear;
+			varying float vfogfar;
 
-		void main(){
-			vec4 shadeColor = vec4(vColor.rgb, 1.0);
-			gl_FragColor = shadeColor * texture2D(tex, vUv);
+			void main(){
+				vec4 shadeColor = vec4(vColor.rgb, 1.0);
+				gl_FragColor = shadeColor * texture2D(tex, vUv);
 
-			// <fog_fragment>			
-			float fogFactor = smoothstep( vfognear, vfogfar, vFogDepth );
-			//gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
-			vec3 finalColor =  mix( gl_FragColor.rgb, fogColor, fogFactor );
+				// <fog_fragment>			
+				float fogFactor = smoothstep( vfognear, vfogfar, vFogDepth );
+				//gl_FragColor.rgb = mix( gl_FragColor.rgb, fogColor, fogFactor );
+				vec3 finalColor =  mix( gl_FragColor.rgb, fogColor, fogFactor );
 
-			//float gr = (finalColor.r + finalColor.g + finalColor.b) * 0.3333333333333;
-			//gl_FragColor.rgb = vec3(finalColor.g, finalColor.b, finalColor.r);
-			//gl_FragColor.rgb = vec3(gr, gr, gr);
-			//gl_FragColor.rgb = vec3(finalColor.b, finalColor.g, finalColor.r);
+				//float gr = (finalColor.r + finalColor.g + finalColor.b) * 0.3333333333333;
+				//gl_FragColor.rgb = vec3(finalColor.g, finalColor.b, finalColor.r);
+				//gl_FragColor.rgb = vec3(gr, gr, gr);
+				//gl_FragColor.rgb = vec3(finalColor.b, finalColor.g, finalColor.r);
 
-			gl_FragColor.rgb = finalColor;
-			
-		}
+				gl_FragColor.rgb = finalColor;
+				
+			}
 		`;
 
 		var scene, renderer, camera;
@@ -141,22 +140,6 @@
 
 			camera = new THREE.PerspectiveCamera(90, width/height, 1, 100000);
 			camera.rotation.order = 'YXZ';
-			//camera.position.y = 160;
-			//camera.position.z = -400;
-
-			// E1L1
-			camera.position.x = 9161.288354044362;
-			camera.position.y = 160;
-			camera.position.z = 45738.39795404206;
-
-			/*
-			//test map
-			camera.position.x = 1173.0146677060202;
-			camera.position.y = 160;
-			camera.position.z = -172.18099228472315;
-			*/
-
-
 			camera.lookAt(new THREE.Vector3(0,0,0));
 
 			const useFlyControls = false;
@@ -213,21 +196,13 @@
 		}
 
 		function shade_to_float(shade) {
-			/*
-			var s = shade + 128;
-			var ret = (s / 256);
-
-			// Invert
-			ret = 1 - ret;
-			*/
-
-			var s = 32 - shade;
+			var s = 26 - shade;
 
 			// Clamp
-			if (s > 32) { s = 32; }
+			if (s > 26) { s = 26; }
 			if (s < 0) { s = 0; }
 
-			s = s / 32;
+			s = s / 26;
 
 			return parseFloat(s);
 		}
