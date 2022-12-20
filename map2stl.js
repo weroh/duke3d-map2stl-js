@@ -119,8 +119,11 @@ function sect2trap(wal) { // static long sect2trap (wall_t *wal, long n, zoid_t 
 }
 
 function getslopez(sector, floorOrCeil, x, y) { // static float getslopez (sect_t *s, long i, float x, float y)
-	let wal = sector.wall;
-	return((wal[0].x-x)*sector.grad[floorOrCeil].x + (wal[0].y-y)*sector.grad[floorOrCeil].y + sector.z[floorOrCeil]);
+	let firstWall = sector.wall[0];
+	let grad = sector.grad[floorOrCeil];
+	let z = sector.z[floorOrCeil];
+
+	return ((firstWall.x-x)*grad.x + (firstWall.y-y)*grad.y + z);
 }
 
 /*
@@ -217,6 +220,37 @@ function normal_from_tri(tri) { // tri = array[3] of {x,y,z}
 	return result;
 }
 
+function triangulate(contours) {
+  var tessy = new libtess.GluTesselator();
+  tessy.gluTessCallback(libtess.gluEnum.GLU_TESS_VERTEX_DATA, function (data, polyVertArray) {
+    // console.log(data[0], data[1]);
+    polyVertArray[polyVertArray.length] = data[0];
+    polyVertArray[polyVertArray.length] = data[1];
+  });
+  // libtess will take 3d verts and flatten to a plane for tesselation
+  // since only doing 2d tesselation here, provide z=1 normal to skip
+  // iterating over verts only to get the same answer.
+  // comment out to test normal-generation code
+  tessy.gluTessNormal(0, 0, 1);
+
+  var triangleVerts = [];
+  tessy.gluTessBeginPolygon(triangleVerts);
+
+  for (var i = 0; i < contours.length; i++) {
+    tessy.gluTessBeginContour();
+    var contour = contours[i];
+    for (var j = 0; j < contour.length; j += 2) {
+      var coords = [contour[j], contour[j + 1], 0];
+      tessy.gluTessVertex(coords, coords);
+    }
+    tessy.gluTessEndContour();
+  }
+
+  // finish polygon (and time triangulation process)
+  tessy.gluTessEndPolygon();
+
+  return triangleVerts;
+}
 /*
  * saveasstl()
  * This function appears to take the stuff we have loaded from loadmap() and convert it into "Simple Triangle Soup"
@@ -253,24 +287,56 @@ function saveasstl() {
 
 		let wall = sectorInfo[s].wall;
 		let firstWall = wall[0]; // Slopes are aligned to wall[0]
-		let n = sectorInfo[s].wallcount;
 
 		// NOTE: This is done slightly differently than in map2stl.c
 		// We return nzoids here because it's easy. We're also not expecting memory to fail. So we aren't even checking for that anymore.
 		// Also in this version sect2trap only gets called once for both the floor and the ceiling
 		let zoids = sect2trap(wall);
 
+
+		// Generate triangles
+		let sector = dukemap.map.sectors[s];
+		let flat = [];
+		let contour = [];
+		let hole = [];
+		let endWall = sector.wallnum+sector.wallptr;
+		for (let w=sector.wallptr;w<endWall;w++) {
+			let curWall = dukemap.map.walls[w];
+			let nextWall = dukemap.map.walls[curWall.point2];
+
+			flat.push(curWall.x);
+			flat.push(curWall.y);
+			flat.push(nextWall.x);
+			flat.push(nextWall.y);
+
+			// Close the loop?
+			if (curWall.point2 < w) {
+				contour.push(new Float32Array(flat));
+				flat = [];
+			}
+		}
+
+		/*
+		let poly = earcut(flat, hole, 2);
+
+		let deviation = earcut.deviation(flat, hole, 2, poly);
+		if (deviation > 0) {
+			console.log(deviation);
+		}
+		*/
+		//let poly = triangulate([new Float32Array(flat)]);
+		let poly = triangulate(contour);
+		
 		//draw sector filled - Ceilings and Floors first
 		//is_floor=0; // CEILING
 		//is_floor=1; // FLOOR
 		for(let is_floor=0; is_floor<=1; is_floor++) {
-			let fz = sectorInfo[s].z[is_floor];
-			let grad = sectorInfo[s].grad[is_floor];
 
 			// parallaxing = skybox. SKIP
 			if (is_floor == 0 && dukemap.map.sectors[s].ceilingstat_.parallaxing == true) continue;
 			if (is_floor == 1 && dukemap.map.sectors[s].floorstat_.parallaxing == true) continue;
 
+			/*
 			for(let i=0; i<zoids.length; i++) {
 				let polInd=0;
 				for(let j=0; j<4; j++) {
@@ -312,7 +378,51 @@ function saveasstl() {
 					});
 				}
 			}
+			*/
+
+			//console.log(flat,hole,poly);
+			for (let i=0;i<poly.length;i+=6) {
+
+				if (is_floor == 1) {
+					tri[0].x = poly[i+0];
+					tri[0].y = poly[i+1];
+
+					tri[1].x = poly[i+2];
+					tri[1].y = poly[i+3];
+
+					tri[2].x = poly[i+4];
+					tri[2].y = poly[i+5];
+				}
+				else {
+					tri[0].x = poly[i+4];
+					tri[0].y = poly[i+5];
+
+					tri[1].x = poly[i+2];
+					tri[1].y = poly[i+3];
+
+					tri[2].x = poly[i+0];
+					tri[2].y = poly[i+1];
+				}
+
+				tri[0].z = getslopez(sectorInfo[s], is_floor, tri[0].x, tri[0].y);
+				tri[1].z = getslopez(sectorInfo[s], is_floor, tri[1].x, tri[1].y);
+				tri[2].z = getslopez(sectorInfo[s], is_floor, tri[2].x, tri[2].y);
+
+
+				normal = normal_from_tri(tri);
+
+				write_map2stl_output({
+					type: (is_floor == 1) ? "floor" : "ceil",
+					normal: normal,
+					tri: [
+						tri[2], tri[1], tri[0]
+					],
+					sector: s,
+					originalIndex: s // original index in the .MAP file
+				});
+			}
 		}
+		
 
 		/*
 		for(let w=0; w<sectorInfo[s].wallcount; w++) {
@@ -505,10 +615,10 @@ function saveasstl() {
 			//let verts = getPortalWalls(s,w);
 			let vn = 0;
 
-			pol[0].x = wall[ w].x; pol[0].y = wall[ w].y;
+			pol[0].x = wall[w].x; pol[0].y = wall[w].y;
 			pol[1].x = wall[nextWall].x; pol[1].y = wall[nextWall].y;
 			pol[2].x = wall[nextWall].x; pol[2].y = wall[nextWall].y;
-			pol[3].x = wall[ w].x; pol[3].y = wall[ w].y;
+			pol[3].x = wall[w].x; pol[3].y = wall[w].y;
 
 			if (wall[w].neighborSector != -1) {
 				vn = 1;

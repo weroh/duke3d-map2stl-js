@@ -13,7 +13,7 @@
 		foreach ($files as $filename) {
 			$pi = pathinfo($filename);
 
-				if (isset($pi['extension']) && strtolower($pi['extension']) == 'map') {
+			if (isset($pi['extension']) && strtolower($pi['extension']) == 'map') {
 				echo '<li class="loadmap"><a href="#" data-filename="map/' . $filename . '">' . $filename . '</a></li>';
 			}
 		}
@@ -22,6 +22,7 @@
 	<p style="color:#fff;">WASD to move. [Space] = go up. [C] = go down. Use arrow keys to look. [Esc] returns mouse. [Alt] + [Enter] = Full screen. Reload to try new map.</p>
 	<script src="dukemap.js"></script>
 	<script src="map2stl.js"></script>
+	<script src="libtess.debug.js"></script>
 
 	<script src="three/three.min.js"></script>
 

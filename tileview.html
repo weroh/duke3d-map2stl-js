@@ -8,13 +8,129 @@
 
 	<script src="jquery.min.js"></script>
 
+	<h1>Tile View</h1>
 	<input type="text" id="picnum" placeholder="picnum"><br />
 	<img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><br>
 	<img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><br>
 	<img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><br>
 	<img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><img class="tile" src="#"><br>
 
+	<h1>Stat</h1>
+	<input type="text" id="stat" placeholder="stat"><br />
+	<textarea style="height:500px; width:250px;" spellcheck="false" id="stat-sector"></textarea>
+	<textarea style="height:500px; width:250px;" spellcheck="false" id="stat-wall"></textarea>
+	<textarea style="height:500px; width:250px;" spellcheck="false" id="stat-sprite"></textarea>
+
 	<script>
+		let stat = {
+			bit: [
+				1, 2, 4, 8, 16, 32, 64, 128,
+				256, 512, 1024, 2048, 4096, 8192, 16384, 32768
+			],
+			read_sprite_stat: function(stat) {
+				var result = {
+					/*
+					bit 0: 1 = Blocking sprite (use with clipmove, getzrange)
+					bit 1: 1 = transluscence, 0 = normal
+					bit 2: 1 = x-flipped, 0 = normal
+					bit 3: 1 = y-flipped, 0 = normal
+					bits 5-4: 
+							00 = FACE sprite (default)
+							01 = WALL sprite (like masked walls)
+							10 = FLOOR sprite (parallel to ceilings&floors)
+					bit 6: 1 = 1-sided sprite, 0 = normal
+					bit 7: 1 = Real centered centering, 0 = foot center
+					bit 8: 1 = Blocking sprite (use with hitscan / cliptype 1)
+					bit 9: 1 = Transluscence reversing, 0 = normal
+					bits 10-14: reserved
+					bit 15: 1 = Invisible sprite, 0 = not invisible
+					*/
+					blocking_clipmove: (stat & this.bit[0]) != 0,
+					transluscence: (stat & this.bit[1]) != 0,
+					xflip: (stat & this.bit[2]) != 0,
+					yflip: (stat & this.bit[3]) != 0,
+					//face: (stat & this.bit[4]) != 0,
+
+					type: "",
+
+					onesided: (stat & this.bit[6]) != 0,
+					realcenter: (stat & this.bit[7]) != 0,
+					blocking_hitscan: (stat & this.bit[8]) != 0,
+					transluscence_rev: (stat & this.bit[9]) != 0,
+					invisible: (stat & this.bit[15]) != 0,
+				};
+
+				var bits4 = (stat & this.bit[4]) != 0;
+				var bits5 = (stat & this.bit[5]) != 0;
+
+				if (bits4 == false && bits5 == false) {
+					result.type = "FACE";
+				}
+				if (bits4 == false && bits5 == true) {
+					result.type = "WALL";
+				}
+				if (bits4 == true && bits5 == false) {
+					result.type = "FLOOR";
+				}
+
+				return result;
+			},
+
+			read_wall_stat: function(stat) {
+				var result = {
+					/*  
+					bit 0: 1 = Blocking wall (use with clipmove, getzrange)
+					bit 1: 1 = bottoms of invisible walls swapped, 0 = not
+					bit 2: 1 = align picture on bottom (for doors), 0 = top
+					bit 3: 1 = x-flipped, 0 = normal
+					bit 4: 1 = masking wall, 0 = not
+					bit 5: 1 = 1-way wall, 0 = not
+					bit 6: 1 = Blocking wall (use with hitscan / cliptype 1)
+					bit 7: 1 = Transluscence, 0 = not
+					bit 8: 1 = y-flipped, 0 = normal
+					bit 9: 1 = Transluscence reversing, 0 = normal
+					bits 10-15: reserved
+					*/
+					blocking_clipmove: (stat & this.bit[0]) != 0,
+					bottomswap: (stat & this.bit[1]) != 0,
+					alignpicbottom: (stat & this.bit[2]) != 0,
+					xflip: (stat & this.bit[3]) != 0,
+					masking: (stat & this.bit[4]) != 0,
+					oneway: (stat & this.bit[5]) != 0,
+					blocking_hitscan: (stat & this.bit[6]) != 0,
+					transluscence: (stat & this.bit[7]) != 0,
+					yflip: (stat & this.bit[8]) != 0,
+					transluscence_rev: (stat & this.bit[9]) != 0,
+				};
+				return result;
+			},
+
+			read_sector_stat: function(stat) {
+				/*
+				bit 0: 1 = parallaxing, 0 = not
+				bit 1: 1 = sloped, 0 = not
+				bit 2: 1 = swap x&y, 0 = not
+				bit 3: 1 = double smooshiness
+				bit 4: 1 = x-flip
+				bit 5: 1 = y-flip
+				bit 6: 1 = Align texture to first wall of sector
+				bits 7-15: reserved
+				*/
+				var result = {
+					parallaxing: (stat & this.bit[0]) != 0,
+					sloped: (stat & this.bit[1]) != 0,
+					swap: (stat & this.bit[2]) != 0,
+					double: (stat & this.bit[3]) != 0,
+					xflip: (stat & this.bit[4]) != 0,
+					yflip: (stat & this.bit[5]) != 0,
+					align: (stat & this.bit[6]) != 0,
+				};
+
+				//console.log(result);
+
+				return result;
+			}
+		};
 		function get_tile_name(picnum) {
 			var num1 = picnum & 0xFF;
 			var num2 = ((picnum >> 8) & 0xFF);
@@ -26,6 +142,12 @@
 		}
 
 		(function($) {
+			$("#stat").on("input", function() {
+				let val = parseInt($(this).val());
+				$("#stat-sector").val("Sector\n---\n" + JSON.stringify(stat.read_sector_stat(val), null, 2));
+				$("#stat-wall").val("Wall\n---\n" + JSON.stringify(stat.read_wall_stat(val), null, 2));
+				$("#stat-sprite").val("Sprite\n---\n" + JSON.stringify(stat.read_sprite_stat(val), null, 2));
+			});
 			$("#picnum").on("input", function() {
 				let picnum = parseInt($(this).val());
 				let filename = get_tile_name(picnum);
